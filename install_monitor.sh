@@ -111,119 +111,74 @@ generate_hooks_config() {
 
     mkdir -p "$config_dir"
 
-    # Check if settings.json exists
-    if [ ! -f "$settings_file" ]; then
-        # Create new settings.json with hooks
-        cat << EOF > "$settings_file"
-{
-  "\$schema": "https://json.schemastore.org/claude-code-settings.json",
-  "hooks": {
+    # Use Python to safely merge hooks into settings.json (handles both new and existing files)
+    SETTINGS_FILE="$settings_file" \
+    HOOK_SCRIPT="$hook_script_abs" \
+    STOP_HOOK="$stop_hook_abs" \
+    python3 << 'PYEOF'
+import os
+import json
+
+settings_file = os.environ['SETTINGS_FILE']
+hook_script = os.environ['HOOK_SCRIPT']
+stop_hook = os.environ['STOP_HOOK']
+
+# Define hooks configuration
+hooks_config = {
     "Notification": [
-      {
-        "matcher": "idle_prompt",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "$hook_script_abs",
-            "timeout": 10
-          }
-        ]
-      },
-      {
-        "matcher": "permission_prompt",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "$hook_script_abs",
-            "timeout": 10
-          }
-        ]
-      },
-      {
-        "matcher": "elicitation_dialog",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "$hook_script_abs",
-            "timeout": 10
-          }
-        ]
-      },
-      {
-        "matcher": "auth_success",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "$hook_script_abs",
-            "timeout": 10
-          }
-        ]
-      },
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "$hook_script_abs",
-            "timeout": 10
-          }
-        ]
-      }
+        {
+            "matcher": "idle_prompt",
+            "hooks": [{"type": "command", "command": hook_script, "timeout": 10}]
+        },
+        {
+            "matcher": "permission_prompt",
+            "hooks": [{"type": "command", "command": hook_script, "timeout": 10}]
+        },
+        {
+            "matcher": "elicitation_dialog",
+            "hooks": [{"type": "command", "command": hook_script, "timeout": 10}]
+        },
+        {
+            "matcher": "auth_success",
+            "hooks": [{"type": "command", "command": hook_script, "timeout": 10}]
+        },
+        {
+            "matcher": "",
+            "hooks": [{"type": "command", "command": hook_script, "timeout": 10}]
+        }
     ],
     "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "$stop_hook_abs",
-            "timeout": 15
-          }
-        ]
-      }
+        {
+            "hooks": [{"type": "command", "command": stop_hook, "timeout": 15}]
+        }
     ]
-  }
 }
-EOF
-    else
-        # settings.json exists - need to merge hooks config
-        cecho "${YELLOW}⚠️  settings.json already exists. Please manually add hooks configuration.${NC}"
-        cecho "${BLUE}Add this to your settings.json:${NC}"
-        cat << EOF
 
-  "hooks": {
-    "Notification": [
-      {
-        "matcher": "idle_prompt",
-        "hooks": [{"type": "command", "command": "$hook_script_abs", "timeout": 10}]
-      },
-      {
-        "matcher": "permission_prompt",
-        "hooks": [{"type": "command", "command": "$hook_script_abs", "timeout": 10}]
-      },
-      {
-        "matcher": "elicitation_dialog",
-        "hooks": [{"type": "command", "command": "$hook_script_abs", "timeout": 10}]
-      },
-      {
-        "matcher": "auth_success",
-        "hooks": [{"type": "command", "command": "$hook_script_abs", "timeout": 10}]
-      },
-      {
-        "matcher": "",
-        "hooks": [{"type": "command", "command": "$hook_script_abs", "timeout": 10}]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [{"type": "command", "command": "$stop_hook_abs", "timeout": 15}]
-      }
-    ]
-  }
-EOF
-        return 0
-    fi
+try:
+    # Load existing settings or create new
+    if os.path.exists(settings_file):
+        with open(settings_file, 'r') as f:
+            settings = json.load(f)
+        action = "Updated"
+    else:
+        settings = {"$schema": "https://json.schemastore.org/claude-code-settings.json"}
+        action = "Created"
 
-    cecho "${GREEN}✅ Created hooks configuration in $settings_file${NC}"
+    # Merge hooks config
+    settings['hooks'] = hooks_config
+
+    # Write back
+    with open(settings_file, 'w') as f:
+        json.dump(settings, f, indent=2)
+
+    print(f"✅ {action} hooks configuration in {settings_file}")
+    exit(0)
+except Exception as e:
+    print(f"❌ Error: {e}")
+    exit(1)
+PYEOF
+
+    return $?
 }
 
 # ================= 4. Account Configuration Wizard =================

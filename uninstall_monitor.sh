@@ -58,11 +58,11 @@ remove_hooks_from_settings() {
 
         if [ "$remove_hook" = "Y" ] || [ "$remove_hook" = "y" ]; then
             # Use Python to safely remove hooks key from JSON
-            python3 << 'PYEOF' "$settings_file"
-import sys
+            SETTINGS_FILE="$settings_file" python3 << 'PYEOF'
+import os
 import json
 
-settings_file = sys.argv[1]
+settings_file = os.environ['SETTINGS_FILE']
 
 try:
     with open(settings_file, 'r') as f:
@@ -75,14 +75,14 @@ try:
             json.dump(settings, f, indent=2)
 
         print(f"✅ Removed hooks from {settings_file}")
-        sys.exit(0)
+        exit(0)
     else:
         print(f"No hooks found in {settings_file}")
-        sys.exit(1)
+        exit(1)
 except Exception as e:
     print(f"❌ Error processing {settings_file}: {e}")
     print(f"Please manually remove the 'hooks' key from this file.")
-    sys.exit(2)
+    exit(2)
 PYEOF
             if [ $? -eq 0 ]; then
                 return 0
