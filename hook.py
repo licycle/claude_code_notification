@@ -35,10 +35,10 @@ def get_account_alias():
     return 'default'
 
 def main():
-    # 1. Retrieve Terminal Bundle ID, PID and Window ID from Environment
+    # 1. Retrieve Terminal Bundle ID, PID and CGWindowID from Environment
     bundle_id = os.environ.get('CLAUDE_TERM_BUNDLE_ID', 'com.apple.Terminal')
     pid = os.environ.get('CLAUDE_TERM_PID', '0')
-    window_id = os.environ.get('CLAUDE_WINDOW_ID', '')
+    window_id = os.environ.get('CLAUDE_CG_WINDOW_ID', '0')
     alias = get_account_alias()
 
     # 2. Parse Arguments from Claude Hook
