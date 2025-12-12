@@ -37,6 +37,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         }
     }
 
+    // MARK: - Handle App Reopen (click app icon while running)
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        log("REOPEN: hasVisibleWindows=\(flag)")
+        if !flag {
+            showSettingsWindow()
+        }
+        return true
+    }
+
     // MARK: - Show Settings Window (GUI Mode)
 
     func showSettingsWindow() {
@@ -165,9 +175,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                             log("ACTION: Unminimized window")
                         }
 
-                        // Raise the window
+                        // Raise the window to front
                         AXUIElementPerformAction(window, kAXRaiseAction as CFString)
                         log("ACTION: Raised window")
+
+                        // Set as main window to ensure focus (for already visible windows)
+                        AXUIElementSetAttributeValue(window, kAXMainAttribute as CFString, true as CFTypeRef)
+                        log("ACTION: Set as main window")
 
                         windowFound = true
                         break
