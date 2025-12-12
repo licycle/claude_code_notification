@@ -41,8 +41,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         log("REOPEN: hasVisibleWindows=\(flag)")
+
         if !flag {
-            showSettingsWindow()
+            // Delay to check if notification click happened around the same time
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+                guard let self = self else { return }
+
+                // If notification was clicked recently, skip showing settings
+                if self.launchedFromNotification {
+                    log("REOPEN: Skipping - notification click detected")
+                    // Reset for future reopen events
+                    self.launchedFromNotification = false
+                } else {
+                    log("REOPEN: No notification, showing settings window")
+                    self.showSettingsWindow()
+                }
+            }
         }
         return true
     }
@@ -145,9 +159,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             log("ACTION: App was hidden, sent unhide request.")
         }
 
-        // 2. Try to find and activate the specific window by CGWindowID using Accessibility API
-        var windowFound = false
-
+        // 2. Unminimize window if needed via Accessibility API
         if cgWindowID > 0 {
             let appElement = AXUIElementCreateApplication(pid)
             var windowsRef: CFTypeRef?
@@ -155,18 +167,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             if AXUIElementCopyAttributeValue(appElement, kAXWindowsAttribute as CFString, &windowsRef) == .success,
                let windows = windowsRef as? [AXUIElement] {
 
-                log("ACTION: Found \(windows.count) windows via Accessibility API")
-
-                for (index, window) in windows.enumerated() {
-                    // Use private API to get CGWindowID from AXUIElement
+                for window in windows {
                     var windowID: CGWindowID = 0
                     let result = _AXUIElementGetWindow(window, &windowID)
 
-                    log("ACTION: Window[\(index)] -> CGWindowID=\(windowID) (result=\(result))")
-
                     if result == .success && windowID == cgWindowID {
-                        log("ACTION: Found matching window at index \(index)")
-
                         // Unminimize if minimized
                         var minimizedRef: CFTypeRef?
                         if AXUIElementCopyAttributeValue(window, kAXMinimizedAttribute as CFString, &minimizedRef) == .success,
@@ -174,52 +179,44 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                             AXUIElementSetAttributeValue(window, kAXMinimizedAttribute as CFString, false as CFTypeRef)
                             log("ACTION: Unminimized window")
                         }
-
-                        // Raise the window to front
-                        AXUIElementPerformAction(window, kAXRaiseAction as CFString)
-                        log("ACTION: Raised window")
-
-                        // Set as main window to ensure focus (for already visible windows)
-                        AXUIElementSetAttributeValue(window, kAXMainAttribute as CFString, true as CFTypeRef)
-                        log("ACTION: Set as main window")
-
-                        windowFound = true
                         break
                     }
                 }
+            }
+        }
+
+        // 3. Delay then use AppleScript for reliable window activation
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            self.bringWindowToFront(pid: pid, cgWindowID: cgWindowID)
+        }
+    }
+
+    // MARK: - Bring Window to Front using AppleScript (more reliable)
+
+    func bringWindowToFront(pid: Int32, cgWindowID: UInt32) {
+        log("ACTION: Bringing window to front via AppleScript (PID=\(pid), CGWindowID=\(cgWindowID))")
+
+        // Use AppleScript to reliably bring window to front
+        let script = """
+        tell application "System Events"
+            set targetProcess to first process whose unix id is \(pid)
+            set frontmost of targetProcess to true
+        end tell
+        """
+
+        var error: NSDictionary?
+        if let scriptObject = NSAppleScript(source: script) {
+            scriptObject.executeAndReturnError(&error)
+            if let err = error {
+                log("AppleScript error: \(err)")
             } else {
-                log("WARNING: Failed to get windows via Accessibility API")
+                log("SUCCESS: Window brought to front via AppleScript")
             }
         }
 
-        // 3. Activate the app (bring to front)
-        app.activate(options: [.activateIgnoringOtherApps])
-
-        // 4. If specific window not found, fallback to unminimize all windows via AppleScript
-        if !windowFound && cgWindowID > 0 {
-            log("WARNING: CGWindowID \(cgWindowID) not found, falling back to unminimize all")
-            let script = """
-            tell application "System Events"
-                set targetProcess to first process whose unix id is \(pid)
-                set frontmost of targetProcess to true
-                tell targetProcess
-                    repeat with w in windows
-                        try
-                            set value of attribute "AXMinimized" of w to false
-                        end try
-                    end repeat
-                end tell
-            end tell
-            """
-            var error: NSDictionary?
-            if let scriptObject = NSAppleScript(source: script) {
-                scriptObject.executeAndReturnError(&error)
-                if let err = error {
-                    log("AppleScript fallback error: \(err)")
-                }
-            }
+        // Also activate via NSRunningApplication for extra reliability
+        if let app = NSRunningApplication(processIdentifier: pid) {
+            app.activate(options: [.activateIgnoringOtherApps])
         }
-
-        log("SUCCESS: Activated PID \(pid) (windowFound=\(windowFound))")
     }
 }
