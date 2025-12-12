@@ -2,44 +2,58 @@ import Foundation
 import UserNotifications
 import AppKit
 
-// --- Global Logging System ---
-let logPath = NSString(string: "~/.claude-hooks/swift_debug.log").expandingTildeInPath
-func log(_ msg: String) {
-    let ts = ISO8601DateFormatter().string(from: Date())
-    let entry = "[\(ts)] \(msg)\n"
-    if let data = entry.data(using: .utf8) {
-        if let fileHandle = FileHandle(forWritingAtPath: logPath) {
-            fileHandle.seekToEndOfFile()
-            fileHandle.write(data)
-            fileHandle.closeFile()
-        } else {
-            try? entry.write(toFile: logPath, atomically: true, encoding: .utf8)
-        }
-    }
-}
+// MARK: - Private API Declaration
 
-// --- App Delegate ---
+@_silgen_name("_AXUIElementGetWindow")
+func _AXUIElementGetWindow(_ element: AXUIElement, _ windowID: UnsafeMutablePointer<CGWindowID>) -> AXError
+
+// MARK: - App Delegate
+
 class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
 
-    func applicationDidFinishLaunching(_ notification: Notification) {
-        log("APP_LAUNCH: App started (Cold Start)")
+    var settingsWindowController: SettingsWindowController?
+    var launchedFromNotification = false
+
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        // Set delegate BEFORE app finishes launching to catch cold-start notification clicks
         let center = UNUserNotificationCenter.current()
         center.delegate = self
+        log("APP_LAUNCH: Delegate set in willFinishLaunching")
+    }
 
-        // If started without arguments (e.g. via notification click),
-        // keep alive briefly to handle the event, then exit if no event occurs.
-        if CommandLine.arguments.count <= 1 {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-                log("TIMEOUT: No interaction detected, exiting.")
-                exit(0)
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        log("APP_LAUNCH: App started")
+
+        // Check if launched from notification click after a short delay
+        // If no notification event received, this is a user-initiated launch (click app icon)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            guard let self = self else { return }
+            if !self.launchedFromNotification {
+                log("APP_LAUNCH: No notification event, showing settings window")
+                self.showSettingsWindow()
+            } else {
+                log("APP_LAUNCH: Launched from notification, staying in background")
             }
         }
     }
 
-    // [CRITICAL] Handle Notification Click
+    // MARK: - Show Settings Window (GUI Mode)
+
+    func showSettingsWindow() {
+        NSApp.setActivationPolicy(.regular)
+        settingsWindowController = SettingsWindowController()
+        settingsWindowController?.showWindow(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    // MARK: - Handle Notification Click
+
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 didReceive response: UNNotificationResponse,
                                 withCompletionHandler completionHandler: @escaping () -> Void) {
+
+        // Mark that we were launched from notification (for cold start detection)
+        launchedFromNotification = true
 
         let userInfo = response.notification.request.content.userInfo
         log("CLICK_EVENT: Notification clicked")
@@ -59,18 +73,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         }
 
         completionHandler()
-        // Delay exit slightly to ensure the open command is processed
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { exit(0) }
+        // Keep app running - settings window stays in background
     }
 
-    // Allow notifications even when app is foreground (rare for this use case)
+    // Allow notifications even when app is foreground
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 willPresent notification: UNNotification,
                                 withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
         completionHandler([.banner, .sound])
     }
 
-    // [FIX] Logic to restore minimized windows
+    // MARK: - Activate App by Bundle ID
+
     func activateApp(bundleID: String) {
         // 1. If the app is strictly hidden (Cmd+H), unhide it first.
         if let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first {
@@ -85,7 +99,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         // which forces minimized windows to pop back up.
         if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
             let config = NSWorkspace.OpenConfiguration()
-            config.activates = true // Bring to front
+            config.activates = true
             config.addsToRecentItems = false
 
             log("ACTION: Sending Open/Reopen request via Workspace...")
@@ -102,7 +116,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         }
     }
 
-    // [NEW] Activate specific process by PID with CGWindowID matching (supports minimized windows)
+    // MARK: - Activate App by PID (with CGWindowID matching)
+
     func activateAppByPID(pid: Int32, cgWindowID: UInt32, fallbackBundle: String?) {
         guard let app = NSRunningApplication(processIdentifier: pid) else {
             log("WARNING: No process found for PID \(pid)")
@@ -193,99 +208,4 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
         log("SUCCESS: Activated PID \(pid) (windowFound=\(windowFound))")
     }
-}
-
-// Private API declaration for getting CGWindowID from AXUIElement
-@_silgen_name("_AXUIElementGetWindow")
-func _AXUIElementGetWindow(_ element: AXUIElement, _ windowID: UnsafeMutablePointer<CGWindowID>) -> AXError
-
-// --- Main Entry Point (Three-State Logic) ---
-let args = CommandLine.arguments
-let app = NSApplication.shared
-let delegate = AppDelegate()
-app.delegate = delegate
-
-if args.count > 1 {
-    let mode = args[1]
-
-    // [State 1: Detector]
-    // Called by Shell Wrapper before Claude runs.
-    // Output format: "bundleID|PID|CGWindowID" for window-level activation
-    if mode == "detect" {
-        if let front = NSWorkspace.shared.frontmostApplication {
-            let bundleID = front.bundleIdentifier ?? "com.apple.Terminal"
-            let pid = front.processIdentifier
-
-            // Get frontmost window's CGWindowID using Quartz Window Services
-            // Try .optionOnScreenOnly first (visible windows), fallback to .optionAll (includes minimized)
-            var windowID: UInt32 = 0
-
-            func findWindow(options: CGWindowListOption) -> UInt32 {
-                let list = CGWindowListCopyWindowInfo([options, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
-                for window in list {
-                    if let ownerPID = window[kCGWindowOwnerPID as String] as? Int32,
-                       ownerPID == pid,
-                       let layer = window[kCGWindowLayer as String] as? Int,
-                       layer == 0,
-                       let wid = window[kCGWindowNumber as String] as? UInt32 {
-                        return wid
-                    }
-                }
-                return 0
-            }
-
-            windowID = findWindow(options: .optionOnScreenOnly)
-            if windowID == 0 {
-                windowID = findWindow(options: .optionAll)
-            }
-
-            // Output format: "bundleID|PID|CGWindowID"
-            print("\(bundleID)|\(pid)|\(windowID)")
-        } else {
-            print("com.apple.Terminal|0|0")
-        }
-        exit(0)
-    }
-    // [State 2: Notifier]
-    // Called by Python Hook after Claude finishes.
-    // Args: notify <title> <message> [sound] [bundle_id] [pid] [cgWindowID]
-    else if mode == "notify" {
-        guard args.count > 3 else { exit(1) }
-        let title = args[2]
-        let message = args[3]
-        let soundName = args.count > 4 ? args[4] : "Hero"
-        let targetBundle = args.count > 5 ? args[5] : "com.apple.Terminal"
-        let targetPID: Int32 = args.count > 6 ? Int32(args[6]) ?? 0 : 0
-        let cgWindowID: UInt32 = args.count > 7 ? UInt32(args[7]) ?? 0 : 0
-
-        log("SEND: Title='\(title)' Target='\(targetBundle)' PID=\(targetPID) CGWindowID=\(cgWindowID)")
-
-        let center = UNUserNotificationCenter.current()
-        let sema = DispatchSemaphore(value: 0)
-
-        center.requestAuthorization(options: [.alert, .sound]) { _, _ in sema.signal() }
-        sema.wait()
-
-        let content = UNMutableNotificationContent()
-        content.title = title
-        content.body = message
-        content.sound = UNNotificationSound(named: UNNotificationSoundName(soundName))
-        content.userInfo = [
-            "targetBundle": targetBundle,
-            "targetPID": targetPID,
-            "cgWindowID": cgWindowID
-        ] // Inject ID, PID and CGWindowID into payload for window-level activation
-
-        let req = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
-
-        center.add(req) { err in
-            if let e = err { log("SEND_ERR: \(e)") }
-            exit(0)
-        }
-        RunLoop.main.run()
-    }
-} else {
-    // [State 3: Handler]
-    // GUI Mode (Activated by Notification Click)
-    app.run()
 }

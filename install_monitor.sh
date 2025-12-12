@@ -40,14 +40,26 @@ mkdir -p "$BASE_DIR"
 cecho "${YELLOW}[1/6] Compiling Swift Core (Minimize-Restore Fix)...${NC}"
 mkdir -p "$INSTALL_DIR/Contents/MacOS"
 
-# Check if Swift source exists
-if [ ! -f "$SCRIPT_DIR/ClaudeMonitor.swift" ]; then
-    cecho "${RED}❌ Error: ClaudeMonitor.swift not found in $SCRIPT_DIR${NC}"
-    exit 1
-fi
+# Check if Swift source files exist
+SWIFT_DIR="$SCRIPT_DIR/swift"
+SWIFT_FILES="Logger.swift PermissionManager.swift AppDelegate.swift SettingsWindow.swift Main.swift"
 
-# Compile Swift from source file
-swiftc "$SCRIPT_DIR/ClaudeMonitor.swift" -o "$BINARY_PATH" -target arm64-apple-macosx12.0
+for swiftfile in $SWIFT_FILES; do
+    if [ ! -f "$SWIFT_DIR/$swiftfile" ]; then
+        cecho "${RED}❌ Error: $swiftfile not found in $SWIFT_DIR${NC}"
+        exit 1
+    fi
+done
+
+# Compile Swift from source files
+swiftc \
+    "$SWIFT_DIR/Logger.swift" \
+    "$SWIFT_DIR/PermissionManager.swift" \
+    "$SWIFT_DIR/AppDelegate.swift" \
+    "$SWIFT_DIR/SettingsWindow.swift" \
+    "$SWIFT_DIR/Main.swift" \
+    -o "$BINARY_PATH" \
+    -target arm64-apple-macosx12.0
 chmod +x "$BINARY_PATH"
 
 # Create Info.plist (Required for Notifications and Automation)
@@ -464,7 +476,8 @@ echo ""
 cecho "${YELLOW}📝 Next Steps:${NC}"
 cecho "   1. Run: ${GREEN}source $RC_FILE${NC}"
 cecho "   2. Test: ${GREEN}$def_alias${NC} (or any configured alias)"
-cecho "   3. Logs: ${BLUE}~/.claude-hooks/${NC}"
+cecho "   3. Settings: ${GREEN}$BINARY_PATH gui${NC}"
+cecho "   4. Logs: ${BLUE}~/.claude-hooks/${NC}"
 echo ""
 cecho "${YELLOW}⚠️  Automation Permission (for minimized window restore):${NC}"
 cecho "   If notification click doesn't restore minimized windows:"

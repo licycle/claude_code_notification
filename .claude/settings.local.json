@@ -4,7 +4,12 @@
       "Bash(cat:*)",
       "Bash(env)",
       "Bash(swiftc:*)",
-      "Bash(/tmp/ClaudeMonitor_test detect:*)"
+      "Bash(/tmp/ClaudeMonitor_test detect:*)",
+      "Bash(swift/Logger.swift )",
+      "Bash(swift/PermissionManager.swift )",
+      "Bash(swift/AppDelegate.swift )",
+      "Bash(swift/SettingsWindow.swift )",
+      "Bash(swift/Main.swift )"
     ]
   }
 }
