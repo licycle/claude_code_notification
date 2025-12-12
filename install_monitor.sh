@@ -50,7 +50,7 @@ fi
 swiftc "$SCRIPT_DIR/ClaudeMonitor.swift" -o "$BINARY_PATH" -target arm64-apple-macosx12.0
 chmod +x "$BINARY_PATH"
 
-# Create Info.plist (Required for Notifications)
+# Create Info.plist (Required for Notifications and Automation)
 cat << EOF > "$INSTALL_DIR/Contents/Info.plist"
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -64,6 +64,8 @@ cat << EOF > "$INSTALL_DIR/Contents/Info.plist"
     <string>APPL</string>
     <key>LSUIElement</key>
     <true/>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>ClaudeMonitor needs automation access to restore minimized windows when you click notifications.</string>
 </dict>
 </plist>
 EOF
@@ -321,14 +323,30 @@ _claude_wrapper() {
     config_path="$1"
     shift 1
 
-    # 1. [Detector] Capture current Terminal Bundle ID
-    detected_bundle=$("$_CLAUDE_MON_APP" detect 2>/dev/null)
+    # 1. [Detector] Capture current Terminal Bundle ID, PID and CGWindowID
+    # Output format: "bundleID|PID|CGWindowID"
+    detected_info=$("$_CLAUDE_MON_APP" detect 2>/dev/null)
+    detected_bundle=$(echo "$detected_info" | cut -d'|' -f1)
+    detected_pid=$(echo "$detected_info" | cut -d'|' -f2)
+    detected_window_id=$(echo "$detected_info" | cut -d'|' -f3)
 
-    # 2. Inject Environment Variable
+    # 2. Extract account alias from config path
+    # ~/.claude -> default, ~/.claude-work -> work
+    config_basename=$(basename "$config_path")
+    if [ "$config_basename" = ".claude" ]; then
+        account_alias="default"
+    else
+        account_alias=$(echo "$config_basename" | sed 's/^\.claude-//')
+    fi
+
+    # 3. Inject Environment Variables
     export CLAUDE_TERM_BUNDLE_ID="${detected_bundle:-com.apple.Terminal}"
+    export CLAUDE_TERM_PID="${detected_pid:-0}"
+    export CLAUDE_CG_WINDOW_ID="${detected_window_id:-0}"
     export CLAUDE_CONFIG_DIR="$config_path"
+    export CLAUDE_ACCOUNT_ALIAS="$account_alias"
 
-    # 3. Run Claude directly
+    # 4. Run Claude directly
     # Note: Rate limit detection is now handled via Stop hook in settings.json
     command claude "$@"
 }
@@ -447,5 +465,10 @@ cecho "${YELLOW}📝 Next Steps:${NC}"
 cecho "   1. Run: ${GREEN}source $RC_FILE${NC}"
 cecho "   2. Test: ${GREEN}$def_alias${NC} (or any configured alias)"
 cecho "   3. Logs: ${BLUE}~/.claude-hooks/${NC}"
+echo ""
+cecho "${YELLOW}⚠️  Automation Permission (for minimized window restore):${NC}"
+cecho "   If notification click doesn't restore minimized windows:"
+cecho "   ${BLUE}System Preferences > Privacy & Security > Privacy > Automation${NC}"
+cecho "   Allow ${GREEN}ClaudeMonitor${NC} to control ${GREEN}System Events${NC}"
 echo ""
 cecho "${BLUE}💡 Tip: Run this script again to add/modify accounts${NC}"

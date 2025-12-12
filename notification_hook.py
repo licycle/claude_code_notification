@@ -20,6 +20,24 @@ def log(tag, msg):
             f.write(f"[{ts}] [NOTIF-{tag}] {msg}\n")
     except: pass
 
+def get_account_alias():
+    """Get account alias from environment variable or infer from config path"""
+    # Prefer explicit alias set by wrapper
+    alias = os.environ.get('CLAUDE_ACCOUNT_ALIAS')
+    if alias:
+        return alias
+
+    # Fallback: infer from CLAUDE_CONFIG_DIR
+    config_dir = os.environ.get('CLAUDE_CONFIG_DIR', '')
+    if config_dir:
+        basename = os.path.basename(config_dir)
+        if basename == '.claude':
+            return 'default'
+        elif basename.startswith('.claude-'):
+            return basename[8:]  # Remove '.claude-' prefix
+
+    return 'default'
+
 def main():
     log("START", "Hook triggered by Claude")
 
@@ -39,29 +57,29 @@ def main():
     # Notification configuration
     config = {
         "idle_prompt": {
-            "title": "⏳ Claude Waiting",
+            "title": "Claude Waiting",
             "sound": "Glass",
             "message_prefix": "⚠️ "
         },
         "permission_prompt": {
-            "title": "🔐 Permission Required",
+            "title": "Permission Required",
             "sound": "Sosumi",
             "message_prefix": "🔑 "
         },
         "elicitation_dialog": {
-            "title": "⌨️ Input Needed",
+            "title": "Input Needed",
             "sound": "Glass",
             "message_prefix": "📝 "
         },
         "auth_success": {
-            "title": "✅ Authentication Success",
+            "title": "Auth Success",
             "sound": "Glass",
             "message_prefix": "✅ "
         }
     }
 
     settings = config.get(notification_type, {
-        "title": "🔔 Claude Notification",
+        "title": "Claude Notification",
         "sound": "Ping",
         "message_prefix": "🔔 "
     })
@@ -70,33 +88,26 @@ def main():
     if notification_type not in config and notification_type != "unknown":
         log("UNKNOWN_TYPE", f"Unrecognized notification_type: '{notification_type}' - using default handler")
 
-    title = settings["title"]
+    # Get account alias and add to title
+    account_alias = get_account_alias()
+    base_title = settings["title"]
+    title = f"{base_title} [{account_alias}]"
+
     sound = settings["sound"]
     body = settings["message_prefix"] + message
 
-    # Detect active terminal bundle ID
-    log("DETECT", "Finding active terminal...")
-    try:
-        detect_result = subprocess.run(
-            [BIN_PATH, "detect"],
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
-        if detect_result.returncode != 0:
-            log("DETECT_ERR", f"Detect returned code {detect_result.returncode}: {detect_result.stderr}")
-        bundle_id = detect_result.stdout.strip() or "com.apple.Terminal"
-        log("DETECT", f"Found bundle: {bundle_id}")
-    except Exception as e:
-        log("DETECT_ERR", f"{e}")
-        bundle_id = "com.apple.Terminal"
+    # Get bundle ID, PID and CGWindowID from environment (set by _claude_wrapper)
+    bundle_id = os.environ.get('CLAUDE_TERM_BUNDLE_ID', 'com.apple.Terminal')
+    pid = os.environ.get('CLAUDE_TERM_PID', '0')
+    cg_window_id = os.environ.get('CLAUDE_CG_WINDOW_ID', '0')
 
-    # Send notification via Swift app - CAPTURE OUTPUT FOR DEBUGGING
-    cmd = [BIN_PATH, "notify", title, body, sound, bundle_id]
-    log("SEND", f"Calling: {' '.join(cmd[:3])}...")
+    log("ENV", f"Bundle={bundle_id}, PID={pid}, CGWindowID={cg_window_id}, Alias={account_alias}")
+
+    # Send notification via Swift app with PID and CGWindowID for window-level activation
+    cmd = [BIN_PATH, "notify", title, body, sound, bundle_id, pid, cg_window_id]
+    log("SEND", f"Calling: {' '.join(cmd[:4])}...")
 
     try:
-        # Use subprocess.run instead of Popen to wait for completion and capture errors
         result = subprocess.run(
             cmd,
             capture_output=True,

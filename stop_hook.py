@@ -25,6 +25,22 @@ def log(tag, msg):
             f.write(f"[{datetime.now():%H:%M:%S}] [STOP-{tag}] {msg}\n")
     except: pass
 
+def get_account_alias():
+    """Get account alias from environment variable or infer from config path"""
+    alias = os.environ.get('CLAUDE_ACCOUNT_ALIAS')
+    if alias:
+        return alias
+
+    config_dir = os.environ.get('CLAUDE_CONFIG_DIR', '')
+    if config_dir:
+        basename = os.path.basename(config_dir)
+        if basename == '.claude':
+            return 'default'
+        elif basename.startswith('.claude-'):
+            return basename[8:]
+
+    return 'default'
+
 def get_last_n_lines(filepath, n=3):
     """Read last n lines from file efficiently"""
     try:
@@ -48,10 +64,10 @@ def detect_rate_limit(transcript_path):
 
     return False, None
 
-def send_notification(title, body, sound, bundle_id):
-    """Call Swift app to send notification"""
+def send_notification(title, body, sound, bundle_id, pid, window_id):
+    """Call Swift app to send notification with PID and window ID for window-level activation"""
     try:
-        subprocess.run([BIN_PATH, "notify", title, body, sound, bundle_id], timeout=10)
+        subprocess.run([BIN_PATH, "notify", title, body, sound, bundle_id, str(pid), window_id], timeout=10)
     except Exception as e:
         log("ERROR", f"Notification failed: {e}")
 
@@ -71,11 +87,17 @@ def main():
     if has_rate_limit:
         log("DETECTED", f"Rate limit found: {keyword}")
         bundle_id = os.environ.get('CLAUDE_TERM_BUNDLE_ID', 'com.apple.Terminal')
+        pid = os.environ.get('CLAUDE_TERM_PID', '0')
+        window_id = os.environ.get('CLAUDE_WINDOW_ID', '')
+        alias = get_account_alias()
+
         send_notification(
-            "⚠️ Rate Limit Reached",
+            f"Rate Limit [{alias}]",
             f"Claude API rate limit detected ({keyword})",
             "Basso",
-            bundle_id
+            bundle_id,
+            pid,
+            window_id
         )
 
     sys.exit(0)
