@@ -98,16 +98,16 @@ cecho "${YELLOW}[3/6] Deploying Hook Logic...${NC}"
 
 # Check if Python source files exist
 for pyfile in hook.py notification_hook.py stop_hook.py; do
-    if [ ! -f "$SCRIPT_DIR/$pyfile" ]; then
-        cecho "${RED}❌ Error: $pyfile not found in $SCRIPT_DIR${NC}"
+    if [ ! -f "$SCRIPT_DIR/python/$pyfile" ]; then
+        cecho "${RED}❌ Error: $pyfile not found in $SCRIPT_DIR/python/${NC}"
         exit 1
     fi
 done
 
 # Copy Python hooks to destination
-cp "$SCRIPT_DIR/hook.py" "$BASE_DIR/hook.py"
-cp "$SCRIPT_DIR/notification_hook.py" "$BASE_DIR/notification_hook.py"
-cp "$SCRIPT_DIR/stop_hook.py" "$BASE_DIR/stop_hook.py"
+cp "$SCRIPT_DIR/python/hook.py" "$BASE_DIR/hook.py"
+cp "$SCRIPT_DIR/python/notification_hook.py" "$BASE_DIR/notification_hook.py"
+cp "$SCRIPT_DIR/python/stop_hook.py" "$BASE_DIR/stop_hook.py"
 
 # Make them executable
 chmod +x "$BASE_DIR/hook.py"

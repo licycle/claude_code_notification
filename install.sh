@@ -34,28 +34,63 @@ generate_hooks_config() {
     HOOK_SCRIPT="$hook_script_abs" \
     STOP_HOOK="$stop_hook_abs" \
     python3 << 'PYEOF'
-import os, json
+import os
+import json
 
 settings_file = os.environ['SETTINGS_FILE']
 hook_script = os.environ['HOOK_SCRIPT']
 stop_hook = os.environ['STOP_HOOK']
 
+# Define hooks configuration
 hooks_config = {
     "Notification": [
-        {"matcher": "idle_prompt", "hooks": [{"type": "command", "command": hook_script, "timeout": 10}]},
-        {"matcher": "permission_prompt", "hooks": [{"type": "command", "command": hook_script, "timeout": 10}]},
-        {"matcher": "elicitation_dialog", "hooks": [{"type": "command", "command": hook_script, "timeout": 10}]},
-        {"matcher": "auth_success", "hooks": [{"type": "command", "command": hook_script, "timeout": 10}]},
-        {"matcher": "", "hooks": [{"type": "command", "command": hook_script, "timeout": 10}]}
+        {
+            "matcher": "idle_prompt",
+            "hooks": [{"type": "command", "command": hook_script, "timeout": 10}]
+        },
+        {
+            "matcher": "permission_prompt",
+            "hooks": [{"type": "command", "command": hook_script, "timeout": 10}]
+        },
+        {
+            "matcher": "elicitation_dialog",
+            "hooks": [{"type": "command", "command": hook_script, "timeout": 10}]
+        },
+        {
+            "matcher": "auth_success",
+            "hooks": [{"type": "command", "command": hook_script, "timeout": 10}]
+        },
+        {
+            "matcher": "",
+            "hooks": [{"type": "command", "command": hook_script, "timeout": 10}]
+        }
     ],
-    "Stop": [{"hooks": [{"type": "command", "command": stop_hook, "timeout": 15}]}]
+    "Stop": [
+        {
+            "hooks": [{"type": "command", "command": stop_hook, "timeout": 15}]
+        }
+    ]
 }
 
 try:
-    settings = json.load(open(settings_file)) if os.path.exists(settings_file) else {"$schema": "https://json.schemastore.org/claude-code-settings.json"}
+    # Load existing settings or create new
+    if os.path.exists(settings_file):
+        with open(settings_file, 'r') as f:
+            settings = json.load(f)
+        action = "Updated"
+    else:
+        settings = {"$schema": "https://json.schemastore.org/claude-code-settings.json"}
+        action = "Created"
+
+    # Merge hooks config
     settings['hooks'] = hooks_config
-    json.dump(settings, open(settings_file, 'w'), indent=2)
-    print(f"✅ Hooks configured in {settings_file}")
+
+    # Write back
+    with open(settings_file, 'w') as f:
+        json.dump(settings, f, indent=2)
+
+    print(f"✅ {action} hooks configuration in {settings_file}")
+    exit(0)
 except Exception as e:
     print(f"❌ Error: {e}")
     exit(1)
@@ -130,16 +165,20 @@ cecho "${GREEN}✅ App Registered with macOS Notification Center${NC}"
 # ================= 3. Install Scripts =================
 cecho "${YELLOW}[3/7] Installing Managers...${NC}"
 
-if [ ! -f "$SCRIPT_DIR/api_manager.py" ] || [ ! -f "$SCRIPT_DIR/account_wizard.sh" ] || [ ! -f "$SCRIPT_DIR/account_manager.py" ]; then
-    cecho "${RED}❌ Missing dependency files (api_manager.py, account_manager.py or account_wizard.sh).${NC}"
-    exit 1
-fi
+# Check required Python files
+for pyfile in api_manager.py account_manager.py hook.py notification_hook.py stop_hook.py; do
+    if [ ! -f "$SCRIPT_DIR/python/$pyfile" ]; then
+        cecho "${RED}❌ Error: $pyfile not found in $SCRIPT_DIR/python/${NC}"
+        exit 1
+    fi
+done
 
-cp "$SCRIPT_DIR/hook.py" "$BASE_DIR/hook.py" 2>/dev/null || true
-cp "$SCRIPT_DIR/notification_hook.py" "$BASE_DIR/notification_hook.py" 2>/dev/null || true
-cp "$SCRIPT_DIR/stop_hook.py" "$BASE_DIR/stop_hook.py" 2>/dev/null || true
-cp "$SCRIPT_DIR/api_manager.py" "$API_MANAGER_SCRIPT"
-cp "$SCRIPT_DIR/account_manager.py" "$ACCOUNT_MANAGER_SCRIPT"
+# Copy all Python scripts
+cp "$SCRIPT_DIR/python/hook.py" "$BASE_DIR/hook.py"
+cp "$SCRIPT_DIR/python/notification_hook.py" "$BASE_DIR/notification_hook.py"
+cp "$SCRIPT_DIR/python/stop_hook.py" "$BASE_DIR/stop_hook.py"
+cp "$SCRIPT_DIR/python/api_manager.py" "$API_MANAGER_SCRIPT"
+cp "$SCRIPT_DIR/python/account_manager.py" "$ACCOUNT_MANAGER_SCRIPT"
 
 chmod +x "$BASE_DIR/"*.py
 cecho "${GREEN}✅ Scripts installed${NC}"
@@ -170,23 +209,15 @@ function claude-ac() {
 
 # --- Core Smart Wrapper ---
 _claude_wrapper() {
-    local config_path="\$1"
-    shift 1
+    local account_alias="\$1"
+    local config_path="\$2"
+    shift 2
 
     # 1. Detect Window IMMEDIATELY (before any processing)
     local detected_info=\$("\$_CLAUDE_MON_APP" detect 2>/dev/null)
     local detected_bundle=\$(echo "\$detected_info" | cut -d'|' -f1)
     local detected_pid=\$(echo "\$detected_info" | cut -d'|' -f2)
     local detected_window_id=\$(echo "\$detected_info" | cut -d'|' -f3)
-
-    # 2. Extract account alias from config path
-    local config_basename=\$(basename "\$config_path")
-    local account_alias
-    if [ "\$config_basename" = ".claude" ]; then
-        account_alias="default"
-    else
-        account_alias=\$(echo "\$config_basename" | sed 's/^\\.claude-//')
-    fi
 
     # 3. Parse Arguments
     local -a claude_args
@@ -229,39 +260,169 @@ _claude_wrapper() {
 EOF
 
 # ================= 4. Account Setup =================
-cecho "${YELLOW}[4/7] Running Account Wizard...${NC}"
-chmod +x "$SCRIPT_DIR/account_wizard.sh"
-"$SCRIPT_DIR/account_wizard.sh"
+cecho "${YELLOW}[4/7] Setting up Claude accounts...${NC}"
 
-TEMP_ACCOUNTS="/tmp/claude_new_accounts.txt"
-first_alias="" # To store one for usage example
+# Use space-separated lists (sh compatible)
+account_aliases=""
+account_paths=""
 
-if [ -f "$TEMP_ACCOUNTS" ]; then
-    # Sync accounts to accounts.json for claude-ac command
-    ACCOUNTS_JSON="$BASE_DIR/accounts.json"
-    echo "{" > "$ACCOUNTS_JSON"
-    first_json=true
-
-    while IFS='|' read -r alias_name path; do
-        if [ -n "$alias_name" ]; then
-            echo "alias $alias_name='_claude_wrapper \"$path\"'" >> "$CONFIG_FILE"
-            cecho "   Registered: $alias_name"
-            if [ -z "$first_alias" ]; then first_alias="$alias_name"; fi
-
-            # Add to accounts.json
-            if [ "$first_json" = true ]; then
-                first_json=false
-            else
-                echo "," >> "$ACCOUNTS_JSON"
-            fi
-            printf '  "%s": "%s"' "$alias_name" "$path" >> "$ACCOUNTS_JSON"
-        fi
-    done < "$TEMP_ACCOUNTS"
-
-    echo "" >> "$ACCOUNTS_JSON"
-    echo "}" >> "$ACCOUNTS_JSON"
-    # Note: Don't delete TEMP_ACCOUNTS yet, needed for hooks configuration
+# Auto-detect existing accounts from config.sh
+if [ -f "$CONFIG_FILE" ]; then
+    cecho "${YELLOW}[!] Detected existing configuration${NC}"
+    while IFS= read -r line; do
+        case "$line" in
+            alias\ *=\'_claude_wrapper*)
+                alias_name=$(echo "$line" | sed 's/alias[[:space:]]*\([^=]*\)=.*/\1/' | tr -d ' ')
+                config_path=$(echo "$line" | sed "s/.*_claude_wrapper \"\([^\"]*\)\" \"\([^\"]*\)\".*/\2/")
+                account_aliases="${account_aliases:+$account_aliases }$alias_name"
+                account_paths="$account_paths|$config_path"
+                cecho "  Found: ${GREEN}$alias_name${NC} -> $config_path"
+                ;;
+        esac
+    done < "$CONFIG_FILE"
 fi
+
+# Interactive Wizard
+cecho "\n${BLUE}--- Account Setup Wizard ---${NC}"
+
+# Check if default account already exists
+has_default=0
+if echo " $account_aliases " | grep -q " c "; then
+    has_default=1
+    cecho "DEFAULT account ${GREEN}'c'${NC} already configured"
+    printf "Keep it? [Y/n]: "
+    read keep_default
+    keep_default=${keep_default:-Y}
+    if [ "$keep_default" = "n" ] || [ "$keep_default" = "N" ]; then
+        account_aliases=$(echo "$account_aliases" | sed 's/ c//' | sed 's/^c //' | sed 's/^c$//')
+        has_default=0
+    fi
+fi
+
+if [ $has_default -eq 0 ]; then
+    printf "Enter alias for DEFAULT account (default 'c'): "
+    read def_alias
+    def_alias=${def_alias:-c}
+    if ! echo " $account_aliases " | grep -q " $def_alias "; then
+        account_aliases="${account_aliases:+$account_aliases }$def_alias"
+        account_paths="${account_paths}|$HOME/.claude"
+    fi
+else
+    def_alias="c"
+fi
+
+# Additional accounts loop
+while true; do
+    printf "Add another account? (y/N): "
+    read yn
+    case $yn in
+        [Yy]* )
+            # Input alias with validation
+            while true; do
+                printf "Alias Name (e.g. cw): "
+                read a_alias
+                if [ -z "$a_alias" ]; then
+                    cecho "${RED}❌ Alias name cannot be empty${NC}"
+                    continue
+                fi
+                if echo " $account_aliases " | grep -q " $a_alias "; then
+                    cecho "${YELLOW}⚠️  Alias '$a_alias' already exists${NC}"
+                    printf "Overwrite? (y/n): "
+                    read overwrite
+                    if [ "$overwrite" = "y" ] || [ "$overwrite" = "Y" ]; then
+                        account_aliases=$(echo "$account_aliases" | sed "s/ $a_alias//" | sed "s/^$a_alias //" | sed "s/^$a_alias$//")
+                        break
+                    fi
+                else
+                    break
+                fi
+            done
+
+            # Input config path with smart default
+            smart_default_path="$HOME/.claude-$a_alias"
+            while true; do
+                printf "Config Path [Default: ${GREEN}$smart_default_path${NC}]: "
+                read a_path
+                if [ -z "$a_path" ]; then
+                    a_path_expanded="$smart_default_path"
+                else
+                    case "$a_path" in
+                        \~/*) a_path_expanded="$HOME${a_path#\~}" ;;
+                        *) a_path_expanded="$a_path" ;;
+                    esac
+                fi
+                if [ ! -d "$a_path_expanded" ]; then
+                    cecho "${YELLOW}⚠️  Path does not exist: $a_path_expanded${NC}"
+                    printf "Create it? (Y/n): "
+                    read create_dir
+                    create_dir=${create_dir:-Y}
+                    if [ "$create_dir" = "y" ] || [ "$create_dir" = "Y" ]; then
+                        mkdir -p "$a_path_expanded"
+                        cecho "${GREEN}✅ Created directory${NC}"
+                        break
+                    fi
+                else
+                    break
+                fi
+            done
+
+            account_aliases="${account_aliases:+$account_aliases }$a_alias"
+            account_paths="$account_paths|$a_path_expanded"
+            cecho "${GREEN}✅ Added: $a_alias -> $a_path_expanded${NC}"
+            ;;
+        * ) break;;
+    esac
+done
+
+# Use Python to generate accounts.json and append aliases to config.sh
+cecho "\n${YELLOW}Writing account configuration...${NC}"
+
+ACCOUNT_ALIASES="$account_aliases" \
+ACCOUNT_PATHS="$account_paths" \
+CONFIG_FILE="$CONFIG_FILE" \
+ACCOUNTS_JSON="$BASE_DIR/accounts.json" \
+python3 << 'PYEOF'
+import os
+import json
+
+aliases = os.environ.get('ACCOUNT_ALIASES', '').split()
+paths = os.environ.get('ACCOUNT_PATHS', '').split('|')[1:]  # Skip first empty element
+config_file = os.environ['CONFIG_FILE']
+accounts_json = os.environ['ACCOUNTS_JSON']
+
+if len(aliases) != len(paths):
+    print(f"❌ Mismatch: {len(aliases)} aliases vs {len(paths)} paths")
+    exit(1)
+
+# Build accounts dict
+accounts = {}
+for alias, path in zip(aliases, paths):
+    if alias and path:
+        accounts[alias] = path
+
+# Write accounts.json
+with open(accounts_json, 'w') as f:
+    json.dump(accounts, f, indent=2)
+print(f"✅ Generated {accounts_json}")
+
+# Append aliases to config.sh
+with open(config_file, 'a') as f:
+    f.write("\n# --- User Aliases ---\n")
+    for alias, path in accounts.items():
+        f.write(f'alias {alias}=\'_claude_wrapper "{alias}" "{path}"\'\n')
+        print(f"   Registered: {alias}")
+
+exit(0)
+PYEOF
+
+if [ $? -ne 0 ]; then
+    cecho "${RED}❌ Failed to generate account configuration${NC}"
+    exit 1
+fi
+
+# Store first alias for usage example
+first_alias=$(echo "$account_aliases" | awk '{print $1}')
+first_alias=${first_alias:-c}
 
 # ================= 5. API Profiles Setup =================
 cecho "\n${BLUE}--- API Profiles Setup ---${NC}"
@@ -322,42 +483,111 @@ done
 
 # ================= 6. Configure Claude Hooks Integration =================
 cecho "\n${YELLOW}[6/7] Configuring Claude Hooks...${NC}"
+cecho "This will enable real-time notifications (idle alerts, permission prompts, etc.)"
+echo ""
 
-if [ -f "$TEMP_ACCOUNTS" ]; then
-    while IFS='|' read -r alias_name path; do
-        if [ -n "$path" ]; then
-            printf "Configure hooks for '$alias_name' ($path)? [Y/n]: "
-            read install_hook
-            install_hook=${install_hook:-Y}
-            if [ "$install_hook" = "Y" ] || [ "$install_hook" = "y" ]; then
-                generate_hooks_config "$path"
-            fi
+# Iterate over accounts using the same method as install_monitor.sh
+idx=0
+for alias_name in $account_aliases; do
+    [ -z "$alias_name" ] && continue
+    idx=$((idx + 1))
+
+    # Extract the idx-th path from account_paths
+    IFS='|'
+    path_idx=0
+    config_path=""
+    for path in $account_paths; do
+        path_idx=$((path_idx + 1))
+        if [ $path_idx -eq $((idx + 1)) ]; then  # +1 because paths start with |
+            config_path="$path"
+            break
         fi
-    done < "$TEMP_ACCOUNTS"
-    rm -f "$TEMP_ACCOUNTS"
-fi
+    done
+    IFS=' '
+
+    [ -z "$config_path" ] && continue
+
+    # Check if settings.json already exists
+    if [ -f "$config_path/settings.json" ]; then
+        cecho "${YELLOW}[!] settings.json exists for '$alias_name' ($config_path)${NC}"
+    fi
+
+    printf "Configure hooks for '$alias_name' ($config_path)? [Y/n]: "
+    read install_hook
+    install_hook=${install_hook:-Y}
+    if [ "$install_hook" = "Y" ] || [ "$install_hook" = "y" ] || [ -z "$install_hook" ]; then
+        generate_hooks_config "$config_path"
+    fi
+done
 
 # ================= 7. Finalize =================
 cecho "\n${YELLOW}[7/7] Configuring Shell Integration...${NC}"
+
 RC_FILE="$HOME/.zshrc"
+[ -f "$HOME/.bashrc" ] && RC_FILE="$HOME/.bashrc"
+
 SOURCE_CMD="source \"$CONFIG_FILE\""
-if ! grep -q "$CONFIG_FILE" "$RC_FILE"; then
+
+# Clean up any duplicate/malformed entries first
+if grep -q "Claude Monitor" "$RC_FILE" 2>/dev/null; then
+    cecho "${YELLOW}[!] Cleaning up existing Claude Monitor entries...${NC}"
+    grep -v "Claude Monitor" "$RC_FILE" | grep -v "$CONFIG_FILE" > "${RC_FILE}.tmp"
+    mv "${RC_FILE}.tmp" "$RC_FILE"
+fi
+
+# Add fresh configuration if not present
+if ! grep -q "$CONFIG_FILE" "$RC_FILE" 2>/dev/null; then
     echo "" >> "$RC_FILE"
+    echo "# Claude Monitor Hooks" >> "$RC_FILE"
     echo "$SOURCE_CMD" >> "$RC_FILE"
 fi
+cecho "${GREEN}✅ Shell configuration updated${NC}"
 
 [ -z "$first_alias" ] && first_alias="c"
 
-cecho "\n${GREEN}🎉 Installation Complete!${NC}"
-cecho ""
-cecho "${BLUE}📋 Usage:${NC}"
-cecho "  1. Reload shell: ${GREEN}source ~/.zshrc${NC}"
-cecho "  2. Run Account:  ${GREEN}$first_alias${NC}"
-cecho "  3. Use API:      ${GREEN}$first_alias --api kimi${NC}"
-cecho ""
+# ================= Summary =================
+cecho "\n${GREEN}╔═══════════════════════════════════════════════╗${NC}"
+cecho "${GREEN}║     🎉 Installation Complete! 🎉             ║${NC}"
+cecho "${GREEN}╚═══════════════════════════════════════════════╝${NC}"
+echo ""
+
+cecho "${BLUE}📋 Configured Accounts:${NC}"
+idx=0
+for alias_name in $account_aliases; do
+    [ -z "$alias_name" ] && continue
+    idx=$((idx + 1))
+    IFS='|'
+    path_idx=0
+    for path in $account_paths; do
+        path_idx=$((path_idx + 1))
+        if [ $path_idx -eq $((idx + 1)) ]; then
+            cecho "   ${GREEN}$alias_name${NC} → $path"
+            break
+        fi
+    done
+    IFS=' '
+done
+echo ""
+
+cecho "${YELLOW}📝 Next Steps:${NC}"
+cecho "   1. Run: ${GREEN}source $RC_FILE${NC}"
+cecho "   2. Test: ${GREEN}$first_alias${NC} (or any configured alias)"
+cecho "   3. Settings: ${GREEN}$BINARY_PATH gui${NC}"
+cecho "   4. Logs: ${BLUE}~/.claude-hooks/${NC}"
+echo ""
+
 cecho "${BLUE}📋 Management Commands:${NC}"
-cecho "  ${GREEN}claude-api list${NC}      - List all API profiles"
-cecho "  ${GREEN}claude-api add${NC}       - Add new API profile"
-cecho "  ${GREEN}claude-api rm${NC}        - Remove API profile"
-cecho "  ${GREEN}claude-ac add${NC}        - Add new account"
-cecho "  ${GREEN}claude-ac list${NC}       - List all accounts"
+cecho "   ${GREEN}claude-api list${NC}      - List all API profiles"
+cecho "   ${GREEN}claude-api add${NC}       - Add new API profile"
+cecho "   ${GREEN}claude-api rm${NC}        - Remove API profile"
+cecho "   ${GREEN}claude-ac add${NC}        - Add new account"
+cecho "   ${GREEN}claude-ac list${NC}       - List all accounts"
+echo ""
+
+cecho "${YELLOW}⚠️  Automation Permission (for minimized window restore):${NC}"
+cecho "   If notification click doesn't restore minimized windows:"
+cecho "   ${BLUE}System Preferences > Privacy & Security > Privacy > Automation${NC}"
+cecho "   Allow ${GREEN}ClaudeMonitor${NC} to control ${GREEN}System Events${NC}"
+echo ""
+
+cecho "${BLUE}💡 Tip: Run this script again to add/modify accounts${NC}"
