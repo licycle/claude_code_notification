@@ -9,7 +9,9 @@
       "Bash(swift/PermissionManager.swift )",
       "Bash(swift/AppDelegate.swift )",
       "Bash(swift/SettingsWindow.swift )",
-      "Bash(swift/Main.swift )"
+      "Bash(swift/Main.swift )",
+      "Bash(find:*)",
+      "Bash(tree:*)"
     ]
   }
 }
