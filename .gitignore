@@ -1,0 +1,78 @@
+# macOS System Files
+.DS_Store
+.AppleDouble
+._*
+.Spotlight-V100
+.Trashes
+*.swp
+*~
+
+# Swift Build Artifacts
+ClaudeMonitor
+build/
+*.app/
+*.playground/
+DerivedData/
+*.xcworkspace/
+*.xcodeproj/
+
+# Python Cache Files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Environment & Configuration
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+*.local.json
+*.private.json
+
+# Claude Monitor Specific
+*.log
+swift_debug.log
+python_debug.log
+~/.claude-hooks/
+.swiftpm/
+
+# Installation Artifacts
+ClaudeMonitor.app/
+install_manifest.txt
+
+# IDE Files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Testing
+test-results/
+.coverage
+.coverage.*
+.cache
+pytest.xml
+
+# Temporary files
+*.tmp
+*.temp
+.temp/
