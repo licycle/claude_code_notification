@@ -26,7 +26,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
         // Check if launched from notification click after a short delay
         // If no notification event received, this is a user-initiated launch (click app icon)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+        // 0.3s to ensure notification callback has time to fire
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
             guard let self = self else { return }
             if !self.launchedFromNotification {
                 log("APP_LAUNCH: No notification event, showing settings window")
@@ -44,7 +45,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
         if !flag {
             // Delay to check if notification click happened around the same time
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+            // 0.2s to ensure notification callback has time to set the flag
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
                 guard let self = self else { return }
 
                 // If notification was clicked recently, skip showing settings
@@ -179,14 +181,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                             AXUIElementSetAttributeValue(window, kAXMinimizedAttribute as CFString, false as CFTypeRef)
                             log("ACTION: Unminimized window")
                         }
+
+                        // Raise the specific window to front (critical for same-app multiple windows)
+                        AXUIElementPerformAction(window, kAXRaiseAction as CFString)
+                        log("ACTION: Raised window to front via AXRaiseAction")
                         break
                     }
                 }
             }
         }
 
-        // 3. Delay then use AppleScript for reliable window activation
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+        // 3. Brief delay to ensure unminimize completes, then activate window
+        // Reduced to 0.15s since AXRaiseAction now handles window ordering
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
             self.bringWindowToFront(pid: pid, cgWindowID: cgWindowID)
         }
     }
