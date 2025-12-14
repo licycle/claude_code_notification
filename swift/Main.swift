@@ -60,7 +60,7 @@ struct ClaudeMonitorApp {
                 guard args.count > 3 else { exit(1) }
                 let title = args[2]
                 let message = args[3]
-                let soundName = args.count > 4 ? args[4] : "Hero"
+                let soundName = args.count > 4 ? args[4] : "Crystal"
                 let targetBundle = args.count > 5 ? args[5] : "com.apple.Terminal"
                 let targetPID: Int32 = args.count > 6 ? Int32(args[6]) ?? 0 : 0
                 let cgWindowID: UInt32 = args.count > 7 ? UInt32(args[7]) ?? 0 : 0
@@ -76,7 +76,17 @@ struct ClaudeMonitorApp {
                 let content = UNMutableNotificationContent()
                 content.title = title
                 content.body = message
-                content.sound = UNNotificationSound(named: UNNotificationSoundName(soundName))
+
+                // Set sound with validation (soundName is defined above)
+                if !soundName.isEmpty {
+                    content.sound = UNNotificationSound(named: UNNotificationSoundName(soundName))
+                }
+
+                // Log sound setting
+                log("SOUND: Using sound '\(soundName.isEmpty ? "system default" : soundName)'")
+
+                // Set app icon for notifications
+                let appBundleURL = Bundle.main.bundleURL
                 content.userInfo = [
                     "targetBundle": targetBundle,
                     "targetPID": targetPID,

@@ -14,7 +14,10 @@
       "Bash(tree:*)",
       "Bash(sh:*)",
       "Bash(echo:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(sips:*)",
+      "Bash(chmod:*)",
+      "Bash(iconutil:*)"
     ]
   }
 }

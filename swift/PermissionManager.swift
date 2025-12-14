@@ -70,6 +70,9 @@ class PermissionManager {
         content.body = "Notification is working correctly!"
         content.sound = UNNotificationSound(named: UNNotificationSoundName("Hero"))
 
+        // Log sound setting
+        log("TEST_SOUND: Using sound 'Hero'")
+
         let request = UNNotificationRequest(
             identifier: UUID().uuidString,
             content: content,
