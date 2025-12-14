@@ -222,7 +222,7 @@ Grant these in System Preferences > Privacy & Security > Privacy.
 
 ### Window Not Restoring on Click
 
-1. Check Automation permission:
+1. Check Automation permission (Using ClaudeMonitor gui to open privacy):
    - System Preferences > Privacy & Security > Privacy > Automation
    - Ensure "ClaudeMonitor" is checked for "System Events"
 
