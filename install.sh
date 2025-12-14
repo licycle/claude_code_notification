@@ -132,6 +132,17 @@ swiftc \
     -target arm64-apple-macosx12.0
 chmod +x "$BINARY_PATH"
 
+# Create Resources directory (for app icon)
+mkdir -p "$INSTALL_DIR/Contents/Resources"
+
+# Copy app icon if it exists
+if [ -f "$SCRIPT_DIR/app_icon.png" ]; then
+    cp "$SCRIPT_DIR/app_icon.png" "$INSTALL_DIR/Contents/Resources/app_icon.png"
+    cecho "${GREEN}✅ App icon copied${NC}"
+else
+    cecho "${YELLOW}[!] No app_icon.png found, skipping icon installation${NC}"
+fi
+
 # Create Info.plist
 cat << EOF > "$INSTALL_DIR/Contents/Info.plist"
 <?xml version="1.0" encoding="UTF-8"?>
@@ -148,6 +159,8 @@ cat << EOF > "$INSTALL_DIR/Contents/Info.plist"
     <true/>
     <key>NSAppleEventsUsageDescription</key>
     <string>ClaudeMonitor needs automation access to restore minimized windows.</string>
+    <key>CFBundleIconFile</key>
+    <string>app_icon.png</string>
 </dict>
 </plist>
 EOF

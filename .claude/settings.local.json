@@ -12,7 +12,9 @@
       "Bash(swift/Main.swift )",
       "Bash(find:*)",
       "Bash(tree:*)",
-      "Bash(sh:*)"
+      "Bash(sh:*)",
+      "Bash(echo:*)",
+      "Bash(ls:*)"
     ]
   }
 }
