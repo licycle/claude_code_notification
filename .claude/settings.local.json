@@ -17,7 +17,11 @@
       "Bash(ls:*)",
       "Bash(sips:*)",
       "Bash(chmod:*)",
-      "Bash(iconutil:*)"
+      "Bash(iconutil:*)",
+      "Bash(./install.sh:*)",
+      "Bash(~/Applications/ClaudeMonitor.app/Contents/MacOS/ClaudeMonitor gui:*)",
+      "Bash(~/Applications/ClaudeMonitor.app/Contents/MacOS/ClaudeMonitor:*)",
+      "Bash(mdls:*)"
     ]
   }
 }

@@ -143,6 +143,26 @@ else
     cecho "${YELLOW}[!] No app_icon.png found, skipping icon installation${NC}"
 fi
 
+# Create .icns icon file if possible
+if command -v iconutil >/dev/null 2>&1 && [ -f "$SCRIPT_DIR/app_icon.png" ]; then
+    mkdir -p "$SCRIPT_DIR/AppIcon.iconset"
+    sips -z 16 16 "$SCRIPT_DIR/app_icon.png" --out "$SCRIPT_DIR/AppIcon.iconset/icon_16x16.png" >/dev/null 2>&1
+    sips -z 32 32 "$SCRIPT_DIR/app_icon.png" --out "$SCRIPT_DIR/AppIcon.iconset/icon_16x16@2x.png" >/dev/null 2>&1
+    sips -z 32 32 "$SCRIPT_DIR/app_icon.png" --out "$SCRIPT_DIR/AppIcon.iconset/icon_32x32.png" >/dev/null 2>&1
+    sips -z 64 64 "$SCRIPT_DIR/app_icon.png" --out "$SCRIPT_DIR/AppIcon.iconset/icon_32x32@2x.png" >/dev/null 2>&1
+    sips -z 128 128 "$SCRIPT_DIR/app_icon.png" --out "$SCRIPT_DIR/AppIcon.iconset/icon_128x128.png" >/dev/null 2>&1
+    sips -z 256 256 "$SCRIPT_DIR/app_icon.png" --out "$SCRIPT_DIR/AppIcon.iconset/icon_128x128@2x.png" >/dev/null 2>&1
+    sips -z 256 256 "$SCRIPT_DIR/app_icon.png" --out "$SCRIPT_DIR/AppIcon.iconset/icon_256x256.png" >/dev/null 2>&1
+    sips -z 512 512 "$SCRIPT_DIR/app_icon.png" --out "$SCRIPT_DIR/AppIcon.iconset/icon_256x256@2x.png" >/dev/null 2>&1
+    sips -z 512 512 "$SCRIPT_DIR/app_icon.png" --out "$SCRIPT_DIR/AppIcon.iconset/icon_512x512.png" >/dev/null 2>&1
+    sips -z 1024 1024 "$SCRIPT_DIR/app_icon.png" --out "$SCRIPT_DIR/AppIcon.iconset/icon_512x512@2x.png" >/dev/null 2>&1
+
+    if iconutil -c icns "$SCRIPT_DIR/AppIcon.iconset" -o "$SCRIPT_DIR/AppIcon.icns" 2>/dev/null; then
+        cp "$SCRIPT_DIR/AppIcon.icns" "$INSTALL_DIR/Contents/Resources/"
+        cecho "${GREEN}✅ .icns icon created and installed${NC}"
+    fi
+fi
+
 # Create Info.plist
 cat << EOF > "$INSTALL_DIR/Contents/Info.plist"
 <?xml version="1.0" encoding="UTF-8"?>
@@ -160,7 +180,7 @@ cat << EOF > "$INSTALL_DIR/Contents/Info.plist"
     <key>NSAppleEventsUsageDescription</key>
     <string>ClaudeMonitor needs automation access to restore minimized windows.</string>
     <key>CFBundleIconFile</key>
-    <string>app_icon.png</string>
+    <string>AppIcon.icns</string>
 </dict>
 </plist>
 EOF
