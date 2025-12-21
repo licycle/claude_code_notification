@@ -6,12 +6,16 @@ APP_NAME="ClaudeMonitor"
 INSTALL_DIR="$HOME/Applications/$APP_NAME.app"
 BINARY_PATH="$INSTALL_DIR/Contents/MacOS/$APP_NAME"
 BASE_DIR="$HOME/.claude-hooks"
+TRACKER_DIR="$BASE_DIR/task_tracker"
 CONFIG_FILE="$BASE_DIR/config.sh"
 API_MANAGER_SCRIPT="$BASE_DIR/api_manager.py"
 ACCOUNT_MANAGER_SCRIPT="$BASE_DIR/account_manager.py"
 PY_LOG="$BASE_DIR/python_debug.log"
 SWIFT_LOG="$BASE_DIR/swift_debug.log"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Task Tracker installation flag (will be set during installation)
+INSTALL_TASK_TRACKER=0
 
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
@@ -22,55 +26,99 @@ NC='\033[0m'
 cecho() { printf "%b\n" "$1"; }
 
 # Function to generate hooks configuration in settings.json
+# Supports both basic mode and Task Tracker mode
 generate_hooks_config() {
     local config_dir=$1
+    local use_tracker=$2  # 1 = use Task Tracker, 0 = basic mode
     local settings_file="$config_dir/settings.json"
-    local hook_script_abs="$HOME/.claude-hooks/notification_hook.py"
-    local stop_hook_abs="$HOME/.claude-hooks/stop_hook.py"
 
     mkdir -p "$config_dir"
 
     SETTINGS_FILE="$settings_file" \
-    HOOK_SCRIPT="$hook_script_abs" \
-    STOP_HOOK="$stop_hook_abs" \
+    USE_TRACKER="$use_tracker" \
+    BASE_DIR="$BASE_DIR" \
     python3 << 'PYEOF'
 import os
 import json
 
 settings_file = os.environ['SETTINGS_FILE']
-hook_script = os.environ['HOOK_SCRIPT']
-stop_hook = os.environ['STOP_HOOK']
+use_tracker = os.environ.get('USE_TRACKER', '0') == '1'
+base_dir = os.environ['BASE_DIR']
 
-# Define hooks configuration
-hooks_config = {
-    "Notification": [
-        {
-            "matcher": "idle_prompt",
-            "hooks": [{"type": "command", "command": hook_script, "timeout": 10}]
-        },
-        {
-            "matcher": "permission_prompt",
-            "hooks": [{"type": "command", "command": hook_script, "timeout": 10}]
-        },
-        {
-            "matcher": "elicitation_dialog",
-            "hooks": [{"type": "command", "command": hook_script, "timeout": 10}]
-        },
-        {
-            "matcher": "auth_success",
-            "hooks": [{"type": "command", "command": hook_script, "timeout": 10}]
-        },
-        {
-            "matcher": "",
-            "hooks": [{"type": "command", "command": hook_script, "timeout": 10}]
-        }
-    ],
-    "Stop": [
-        {
-            "hooks": [{"type": "command", "command": stop_hook, "timeout": 15}]
-        }
-    ]
-}
+# Basic hooks (always included)
+basic_notification_hook = f"{base_dir}/notification_hook.py"
+basic_stop_hook = f"{base_dir}/stop_hook.py"
+
+# Task Tracker hooks
+tracker_goal_hook = f"{base_dir}/task_tracker/hooks/goal_tracker.py"
+tracker_progress_hook = f"{base_dir}/task_tracker/hooks/progress_tracker.py"
+tracker_notification_hook = f"{base_dir}/task_tracker/hooks/notification_tracker.py"
+tracker_snapshot_hook = f"{base_dir}/task_tracker/hooks/snapshot_hook.py"
+
+if use_tracker:
+    # Full Task Tracker mode - richer notifications with progress tracking
+    hooks_config = {
+        "UserPromptSubmit": [
+            {
+                "hooks": [{"type": "command", "command": f"python3 {tracker_goal_hook}", "timeout": 5}]
+            }
+        ],
+        "PostToolUse": [
+            {
+                "matcher": "TodoWrite|AskUserQuestion",
+                "hooks": [{"type": "command", "command": f"python3 {tracker_progress_hook}", "timeout": 5}]
+            }
+        ],
+        "Notification": [
+            {
+                "matcher": "idle_prompt|elicitation_dialog|permission_prompt",
+                "hooks": [{"type": "command", "command": f"python3 {tracker_notification_hook}", "timeout": 5}]
+            },
+            {
+                "matcher": "auth_success",
+                "hooks": [{"type": "command", "command": basic_notification_hook, "timeout": 10}]
+            }
+        ],
+        "Stop": [
+            {
+                "hooks": [
+                    {"type": "command", "command": basic_stop_hook, "timeout": 15},
+                    {"type": "command", "command": f"python3 {tracker_snapshot_hook}", "timeout": 30}
+                ]
+            }
+        ]
+    }
+else:
+    # Basic mode - simple notifications only
+    hooks_config = {
+        "Notification": [
+            {
+                "matcher": "idle_prompt",
+                "hooks": [{"type": "command", "command": basic_notification_hook, "timeout": 10}]
+            },
+            {
+                "matcher": "permission_prompt",
+                "hooks": [{"type": "command", "command": basic_notification_hook, "timeout": 10}]
+            },
+            {
+                "matcher": "elicitation_dialog",
+                "hooks": [{"type": "command", "command": basic_notification_hook, "timeout": 10}]
+            },
+            {
+                "matcher": "auth_success",
+                "hooks": [{"type": "command", "command": basic_notification_hook, "timeout": 10}]
+            },
+            {
+                "matcher": "",
+                "hooks": [{"type": "command", "command": basic_notification_hook, "timeout": 10}]
+            }
+        ],
+        "Stop": [
+            {
+                "hooks": [{"type": "command", "command": basic_stop_hook, "timeout": 15}]
+            }
+        ]
+    }
 
 try:
     # Load existing settings or create new
@@ -89,7 +137,8 @@ try:
     with open(settings_file, 'w') as f:
         json.dump(settings, f, indent=2)
 
-    print(f"✅ {action} hooks configuration in {settings_file}")
+    mode_str = "Task Tracker" if use_tracker else "Basic"
+    print(f"✅ {action} hooks configuration ({mode_str} mode) in {settings_file}")
     exit(0)
 except Exception as e:
     print(f"❌ Error: {e}")
@@ -215,6 +264,75 @@ cp "$SCRIPT_DIR/python/account_manager.py" "$ACCOUNT_MANAGER_SCRIPT"
 
 chmod +x "$BASE_DIR/"*.py
 cecho "${GREEN}✅ Scripts installed${NC}"
+
+# ================= 3.5 Task Tracker Installation (Optional) =================
+cecho "\n${BLUE}--- Task Tracker Setup ---${NC}"
+cecho "Task Tracker provides enhanced features:"
+cecho "  • ${GREEN}Progress tracking${NC} - Track todo completion with progress bars"
+cecho "  • ${GREEN}Goal tracking${NC} - Remember your original goals across sessions"
+cecho "  • ${GREEN}Rich notifications${NC} - Detailed notifications with context"
+cecho "  • ${GREEN}Session snapshots${NC} - AI-powered task summaries"
+cecho "  • ${GREEN}SQLite database${NC} - Persistent task history"
+echo ""
+
+printf "Install Task Tracker? (Recommended) [Y/n]: "
+read install_tracker
+install_tracker=${install_tracker:-Y}
+
+if [ "$install_tracker" = "Y" ] || [ "$install_tracker" = "y" ]; then
+    INSTALL_TASK_TRACKER=1
+    cecho "${YELLOW}Installing Task Tracker...${NC}"
+
+    # Check Task Tracker source files exist
+    TRACKER_SRC="$SCRIPT_DIR/python/task_tracker"
+    if [ ! -d "$TRACKER_SRC" ]; then
+        cecho "${RED}❌ Error: Task Tracker source not found at $TRACKER_SRC${NC}"
+        cecho "${YELLOW}Falling back to basic mode...${NC}"
+        INSTALL_TASK_TRACKER=0
+    else
+        # Create directories
+        mkdir -p "$TRACKER_DIR/hooks"
+        mkdir -p "$TRACKER_DIR/services"
+        mkdir -p "$TRACKER_DIR/logs"
+        mkdir -p "$TRACKER_DIR/state"
+
+        # Copy hook scripts
+        cp "$TRACKER_SRC/hooks/utils.py" "$TRACKER_DIR/hooks/"
+        cp "$TRACKER_SRC/hooks/goal_tracker.py" "$TRACKER_DIR/hooks/"
+        cp "$TRACKER_SRC/hooks/progress_tracker.py" "$TRACKER_DIR/hooks/"
+        cp "$TRACKER_SRC/hooks/notification_tracker.py" "$TRACKER_DIR/hooks/"
+        cp "$TRACKER_SRC/hooks/snapshot_hook.py" "$TRACKER_DIR/hooks/"
+        cp "$TRACKER_SRC/hooks/__init__.py" "$TRACKER_DIR/hooks/" 2>/dev/null || touch "$TRACKER_DIR/hooks/__init__.py"
+
+        # Make hooks executable
+        chmod +x "$TRACKER_DIR/hooks/"*.py
+
+        # Copy service modules
+        cp "$TRACKER_SRC/__init__.py" "$TRACKER_DIR/"
+        cp "$TRACKER_SRC/services/__init__.py" "$TRACKER_DIR/services/"
+        cp "$TRACKER_SRC/services/database.py" "$TRACKER_DIR/services/"
+        cp "$TRACKER_SRC/services/summary_service.py" "$TRACKER_DIR/services/"
+        cp "$TRACKER_SRC/services/notification.py" "$TRACKER_DIR/services/"
+
+        # Copy config template if config doesn't exist
+        if [ ! -f "$TRACKER_DIR/config.json" ]; then
+            cp "$TRACKER_SRC/config.template.json" "$TRACKER_DIR/config.json"
+        fi
+
+        # Initialize database
+        python3 -c "
+import sys
+sys.path.insert(0, '$TRACKER_DIR')
+from services.database import init_database
+init_database()
+" 2>/dev/null && cecho "${GREEN}✅ Task Tracker installed${NC}" || {
+            cecho "${YELLOW}⚠️ Database init failed, but files installed${NC}"
+        }
+    fi
+else
+    INSTALL_TASK_TRACKER=0
+    cecho "${YELLOW}Skipping Task Tracker (basic mode)${NC}"
+fi
 
 # ================= Generate Shell Config =================
 cecho "${YELLOW}Generating Shell Integration...${NC}"
@@ -516,6 +634,11 @@ done
 
 # ================= 6. Configure Claude Hooks Integration =================
 cecho "\n${YELLOW}[6/7] Configuring Claude Hooks...${NC}"
+if [ $INSTALL_TASK_TRACKER -eq 1 ]; then
+    cecho "Mode: ${GREEN}Task Tracker${NC} (enhanced notifications with progress tracking)"
+else
+    cecho "Mode: ${YELLOW}Basic${NC} (simple notifications)"
+fi
 cecho "This will enable real-time notifications (idle alerts, permission prompts, etc.)"
 echo ""
 
@@ -549,7 +672,7 @@ for alias_name in $account_aliases; do
     read install_hook
     install_hook=${install_hook:-Y}
     if [ "$install_hook" = "Y" ] || [ "$install_hook" = "y" ] || [ -z "$install_hook" ]; then
-        generate_hooks_config "$config_path"
+        generate_hooks_config "$config_path" "$INSTALL_TASK_TRACKER"
     fi
 done
 
@@ -584,6 +707,16 @@ cecho "${GREEN}║     🎉 Installation Complete! 🎉             ║${NC}"
 cecho "${GREEN}╚═══════════════════════════════════════════════╝${NC}"
 echo ""
 
+# Show installation mode
+if [ $INSTALL_TASK_TRACKER -eq 1 ]; then
+    cecho "${BLUE}📦 Installation Mode:${NC} ${GREEN}Full (with Task Tracker)${NC}"
+    cecho "   Features: Progress tracking, Goal tracking, Rich notifications, Session snapshots"
+else
+    cecho "${BLUE}📦 Installation Mode:${NC} ${YELLOW}Basic${NC}"
+    cecho "   Features: Simple notifications, Rate limit detection"
+fi
+echo ""
+
 cecho "${BLUE}📋 Configured Accounts:${NC}"
 idx=0
 for alias_name in $account_aliases; do
@@ -607,6 +740,9 @@ cecho "   1. Run: ${GREEN}source $RC_FILE${NC}"
 cecho "   2. Test: ${GREEN}$first_alias${NC} (or any configured alias)"
 cecho "   3. Settings: ${GREEN}$BINARY_PATH gui${NC}"
 cecho "   4. Logs: ${BLUE}~/.claude-hooks/${NC}"
+if [ $INSTALL_TASK_TRACKER -eq 1 ]; then
+    cecho "   5. Task Tracker config: ${BLUE}~/.claude-hooks/task_tracker/config.json${NC}"
+fi
 echo ""
 
 cecho "${BLUE}📋 Management Commands:${NC}"
@@ -623,4 +759,4 @@ cecho "   ${BLUE}System Preferences > Privacy & Security > Privacy > Automation$
 cecho "   Allow ${GREEN}ClaudeMonitor${NC} to control ${GREEN}System Events${NC}"
 echo ""
 
-cecho "${BLUE}💡 Tip: Run this script again to add/modify accounts${NC}"
+cecho "${BLUE}💡 Tip: Run this script again to add/modify accounts or change installation mode${NC}"

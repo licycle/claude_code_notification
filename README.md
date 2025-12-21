@@ -4,12 +4,20 @@ Claude Monitor is a macOS notification and session management system for [Claude
 
 ## ✨ Features
 
+### Core Features (Always Included)
 - **Smart Notifications**: Get desktop notifications for Claude Code events even when the terminal is in the background
 - **Window Restoration**: Click notifications to automatically bring your terminal back to front
 - **Multi-Account Support**: Manage multiple Claude Code configurations with simple aliases (`c`, `cw`, etc.)
 - **Multi-API Support**: Easily switch between different API providers (Anthropic, Kimi, Qwen, DeepSeek, etc.)
-- **Session Insights**: Monitor your Claude Code sessions with detailed logging
+- **Rate Limit Detection**: Get notified when API rate limits are hit
 - **Lightweight**: Minimal performance overhead, runs natively on macOS
+
+### Task Tracker Features (Optional)
+- **Progress Tracking**: Track todo completion with visual progress bars in notifications
+- **Goal Tracking**: Remember your original goals across sessions
+- **Rich Notifications**: Detailed notifications with context and progress info
+- **Session Snapshots**: AI-powered task summaries when sessions end
+- **SQLite Database**: Persistent task history and session data
 
 ## 🚀 Quick Start
 
@@ -25,6 +33,7 @@ The installer will:
 - Build and install the ClaudeMonitor app
 - Set up command aliases for your Claude Code accounts
 - Configure notification hooks in Claude Code settings
+- **Ask if you want to install Task Tracker** (recommended for enhanced features)
 - Guide you through API profile setup
 
 ### 2. Source Your Shell Configuration
@@ -142,14 +151,24 @@ claude-notification/
 │   ├── SettingsWindow.swift   # Settings GUI
 │   ├── PermissionManager.swift # macOS permissions handling
 │   └── Logger.swift           # Logging utilities
-├── python/                     # Python management scripts
+├── python/                     # Python scripts
 │   ├── api_manager.py         # API profile management
 │   ├── account_manager.py     # Account management
 │   ├── hook.py               # Base hook functionality
-│   ├── notification_hook.py  # Notification event handler
-│   └── stop_hook.py          # Session stop handler
-├── install.sh                # Main installation script
-├── install_monitor.sh        # Claude Code monitor installer
+│   ├── notification_hook.py  # Basic notification handler
+│   ├── stop_hook.py          # Rate limit detection handler
+│   └── task_tracker/         # Task Tracker module (optional)
+│       ├── hooks/            # Enhanced hook scripts
+│       │   ├── goal_tracker.py        # Goal capture
+│       │   ├── progress_tracker.py    # Todo progress tracking
+│       │   ├── notification_tracker.py # Rich notifications
+│       │   └── snapshot_hook.py       # Session snapshots
+│       ├── services/         # Service modules
+│       │   ├── database.py           # SQLite storage
+│       │   ├── notification.py       # Rich notification service
+│       │   └── summary_service.py    # AI summary generation
+│       └── config.template.json      # Configuration template
+├── install.sh                # Unified installation script
 ├── uninstall_monitor.sh      # Cleanup script
 └── account_wizard.sh         # Account setup wizard
 ```

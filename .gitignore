@@ -77,4 +77,3 @@ pytest.xml
 *.temp
 .temp/
 
-docs/
