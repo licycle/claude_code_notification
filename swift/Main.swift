@@ -73,9 +73,15 @@ struct ClaudeMonitorApp {
                 center.requestAuthorization(options: [.alert, .sound]) { _, _ in sema.signal() }
                 sema.wait()
 
+                // Register notification categories for rich notifications
+                registerNotificationCategories()
+
                 let content = UNMutableNotificationContent()
                 content.title = title
                 content.body = message
+
+                // Set category for action buttons
+                content.categoryIdentifier = "TASK_STATUS"
 
                 // Set sound with validation (soundName is defined above)
                 if !soundName.isEmpty {
@@ -128,4 +134,62 @@ struct ClaudeMonitorApp {
             app.run()
         }
     }
+}
+
+// MARK: - Rich Notification Categories
+
+/// Register notification categories with action buttons
+func registerNotificationCategories() {
+    // Jump to terminal action
+    let jumpAction = UNNotificationAction(
+        identifier: "JUMP_ACTION",
+        title: "跳转到终端",
+        options: [.foreground]
+    )
+
+    // Dismiss action
+    let dismissAction = UNNotificationAction(
+        identifier: "DISMISS_ACTION",
+        title: "稍后处理",
+        options: []
+    )
+
+    // View details action
+    let viewAction = UNNotificationAction(
+        identifier: "VIEW_ACTION",
+        title: "查看详情",
+        options: [.foreground]
+    )
+
+    // Task status category (for idle, decision needed, etc.)
+    let taskCategory = UNNotificationCategory(
+        identifier: "TASK_STATUS",
+        actions: [jumpAction, dismissAction],
+        intentIdentifiers: [],
+        options: [.customDismissAction]
+    )
+
+    // Decision needed category (with more prominent actions)
+    let decisionCategory = UNNotificationCategory(
+        identifier: "DECISION_NEEDED",
+        actions: [jumpAction, viewAction, dismissAction],
+        intentIdentifiers: [],
+        options: [.customDismissAction]
+    )
+
+    // Permission needed category
+    let permissionCategory = UNNotificationCategory(
+        identifier: "PERMISSION_NEEDED",
+        actions: [jumpAction, dismissAction],
+        intentIdentifiers: [],
+        options: [.customDismissAction]
+    )
+
+    UNUserNotificationCenter.current().setNotificationCategories([
+        taskCategory,
+        decisionCategory,
+        permissionCategory
+    ])
+
+    log("CATEGORY: Registered notification categories")
 }

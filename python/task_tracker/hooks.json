@@ -1,0 +1,53 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.claude-task-tracker/hooks/goal_tracker.py",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+
+    "PostToolUse": [
+      {
+        "matcher": "TodoWrite|AskUserQuestion",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.claude-task-tracker/hooks/progress_tracker.py",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+
+    "Notification": [
+      {
+        "matcher": "idle_prompt|elicitation_dialog|permission_prompt",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.claude-task-tracker/hooks/notification_tracker.py",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.claude-task-tracker/hooks/snapshot_hook.py",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

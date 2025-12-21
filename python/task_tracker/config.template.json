@@ -1,0 +1,38 @@
+{
+  "summary": {
+    "provider": "auto",
+
+    "third_party": {
+      "enabled": false,
+      "base_url": "https://api.deepseek.com/v1",
+      "api_key": "",
+      "model": "deepseek-chat",
+      "max_tokens": 500
+    },
+
+    "claude_session": {
+      "model": "haiku",
+      "max_tokens": 500
+    },
+
+    "extraction_only": {
+      "enabled": true,
+      "max_preview_length": 200
+    }
+  },
+
+  "notification": {
+    "enabled": true,
+    "sound": true,
+    "show_progress": true,
+    "show_pending_decision": true,
+    "idle_notify": true,
+    "decision_notify": true,
+    "permission_notify": true
+  },
+
+  "cleanup": {
+    "auto_cleanup": true,
+    "cleanup_days": 7
+  }
+}

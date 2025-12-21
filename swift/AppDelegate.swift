@@ -72,7 +72,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    // MARK: - Handle Notification Click
+    // MARK: - Handle Notification Click and Actions
 
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 didReceive response: UNNotificationResponse,
@@ -82,20 +82,44 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         launchedFromNotification = true
 
         let userInfo = response.notification.request.content.userInfo
-        log("CLICK_EVENT: Notification clicked")
+        let actionIdentifier = response.actionIdentifier
+
+        log("CLICK_EVENT: Notification action=\(actionIdentifier)")
 
         let bundleID = userInfo["targetBundle"] as? String
         let targetPID = userInfo["targetPID"] as? Int32 ?? 0
         let cgWindowID = userInfo["cgWindowID"] as? UInt32 ?? 0
 
-        if targetPID > 0 {
-            log("ACTION: Attempting to activate PID \(targetPID) CGWindowID=\(cgWindowID)")
-            activateAppByPID(pid: targetPID, cgWindowID: cgWindowID, fallbackBundle: bundleID)
-        } else if let bundleID = bundleID {
-            log("ACTION: Falling back to bundle activation \(bundleID)")
-            activateApp(bundleID: bundleID)
-        } else {
-            log("ERROR: No bundle ID or PID found in payload")
+        // Handle different actions
+        switch actionIdentifier {
+        case "JUMP_ACTION", UNNotificationDefaultActionIdentifier:
+            // Jump to terminal - activate the target window
+            if targetPID > 0 {
+                log("ACTION: Jumping to PID \(targetPID) CGWindowID=\(cgWindowID)")
+                activateAppByPID(pid: targetPID, cgWindowID: cgWindowID, fallbackBundle: bundleID)
+            } else if let bundleID = bundleID {
+                log("ACTION: Falling back to bundle activation \(bundleID)")
+                activateApp(bundleID: bundleID)
+            } else {
+                log("ERROR: No bundle ID or PID found in payload")
+            }
+
+        case "VIEW_ACTION":
+            // View details - could open a details window in the future
+            log("ACTION: View details requested")
+            // For now, just activate the terminal
+            if targetPID > 0 {
+                activateAppByPID(pid: targetPID, cgWindowID: cgWindowID, fallbackBundle: bundleID)
+            } else if let bundleID = bundleID {
+                activateApp(bundleID: bundleID)
+            }
+
+        case "DISMISS_ACTION", UNNotificationDismissActionIdentifier:
+            // Dismissed - just log and do nothing
+            log("ACTION: Notification dismissed")
+
+        default:
+            log("ACTION: Unknown action \(actionIdentifier)")
         }
 
         completionHandler()

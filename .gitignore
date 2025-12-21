@@ -76,3 +76,5 @@ pytest.xml
 *.tmp
 *.temp
 .temp/
+
+docs/

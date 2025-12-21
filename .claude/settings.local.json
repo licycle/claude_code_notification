@@ -21,7 +21,10 @@
       "Bash(./install.sh:*)",
       "Bash(~/Applications/ClaudeMonitor.app/Contents/MacOS/ClaudeMonitor gui:*)",
       "Bash(~/Applications/ClaudeMonitor.app/Contents/MacOS/ClaudeMonitor:*)",
-      "Bash(mdls:*)"
+      "Bash(mdls:*)",
+      "mcp__deepwiki__read_wiki_contents",
+      "mcp__deepwiki__ask_question",
+      "Bash(mkdir:*)"
     ]
   }
 }
