@@ -24,7 +24,12 @@
       "Bash(mdls:*)",
       "mcp__deepwiki__read_wiki_contents",
       "mcp__deepwiki__ask_question",
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "Bash(wc:*)",
+      "Bash(grep:*)",
+      "WebSearch",
+      "Bash(sqlite3 ~/.claude-task-tracker/tasks.db \"\n.mode column\n.headers on\n\necho ''=== SESSIONS ==='';\nSELECT session_id, project, substr\\(original_goal, 1, 50\\) as goal, current_status, last_activity FROM sessions ORDER BY last_activity DESC LIMIT 10;\n\necho '''';\necho ''=== PROGRESS ==='';\nSELECT session_id, completed_count, total_count, updated_at FROM progress ORDER BY updated_at DESC LIMIT 10;\n\necho '''';\necho ''=== SNAPSHOTS ==='';\nSELECT session_id, substr\\(last_user_message, 1, 40\\) as last_user, created_at FROM snapshots ORDER BY created_at DESC LIMIT 10;\n\necho '''';\necho ''=== TIMELINE \\(最近20条\\) ==='';\nSELECT session_id, event_type, substr\\(content, 1, 30\\) as content, timestamp FROM timeline ORDER BY timestamp DESC LIMIT 20;\n\")",
+      "Bash(sqlite3:*)"
     ]
   }
 }
