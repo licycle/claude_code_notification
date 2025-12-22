@@ -25,7 +25,12 @@ CREATE TABLE IF NOT EXISTS sessions (
     original_goal TEXT NOT NULL,
     current_status TEXT DEFAULT 'working',
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    last_activity TEXT DEFAULT CURRENT_TIMESTAMP
+    last_activity TEXT DEFAULT CURRENT_TIMESTAMP,
+    -- Window info for terminal jumping (added v2)
+    account_alias TEXT DEFAULT 'default',
+    bundle_id TEXT,
+    terminal_pid INTEGER,
+    window_id INTEGER
 );
 
 -- Goal evolution table (track goal changes over time)
@@ -113,6 +118,34 @@ def init_database():
     """Initialize database tables"""
     with get_connection() as conn:
         conn.executescript(SCHEMA_SQL)
+    # Run migrations for existing databases
+    _migrate_add_window_info_columns()
+
+
+def _migrate_add_window_info_columns():
+    """
+    Migration: Add window info columns to existing sessions table.
+    These columns are used for terminal jumping feature.
+    """
+    new_columns = [
+        ('account_alias', "TEXT DEFAULT 'default'"),
+        ('bundle_id', 'TEXT'),
+        ('terminal_pid', 'INTEGER'),
+        ('window_id', 'INTEGER'),
+    ]
+
+    with get_connection() as conn:
+        # Get existing columns
+        cursor = conn.execute("PRAGMA table_info(sessions)")
+        existing_cols = {row['name'] for row in cursor.fetchall()}
+
+        # Add missing columns
+        for col_name, col_type in new_columns:
+            if col_name not in existing_cols:
+                try:
+                    conn.execute(f"ALTER TABLE sessions ADD COLUMN {col_name} {col_type}")
+                except sqlite3.OperationalError:
+                    pass  # Column already exists
 
 
 def get_session(session_id: str) -> Optional[Dict]:
@@ -126,15 +159,25 @@ def get_session(session_id: str) -> Optional[Dict]:
         return dict(row) if row else None
 
 
-def create_session(session_id: str, project: str, original_goal: str) -> None:
-    """Create a new session"""
+def create_session(
+    session_id: str,
+    project: str,
+    original_goal: str,
+    account_alias: str = 'default',
+    bundle_id: str = None,
+    terminal_pid: int = None,
+    window_id: int = None
+) -> None:
+    """Create a new session with optional window info for terminal jumping"""
     now = datetime.now().isoformat()
     with get_connection() as conn:
         conn.execute(
             """INSERT OR IGNORE INTO sessions
-               (session_id, project, original_goal, created_at, last_activity)
-               VALUES (?, ?, ?, ?, ?)""",
-            (session_id, project, original_goal, now, now)
+               (session_id, project, original_goal, created_at, last_activity,
+                account_alias, bundle_id, terminal_pid, window_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (session_id, project, original_goal, now, now,
+             account_alias, bundle_id, terminal_pid, window_id)
         )
         # Record to timeline
         conn.execute(
@@ -554,7 +597,13 @@ def get_session_summary(session_id: str) -> Optional[Dict]:
         'pending_options': json.loads(pending_list[0].get('options_json', '[]')) if pending_list else [],
         'timeline': timeline_nodes,
         'last_activity': session.get('last_activity', ''),
-        'created_at': session.get('created_at', '')
+        'created_at': session.get('created_at', ''),
+        # Window info for terminal jumping
+        'account_alias': session.get('account_alias', 'default'),
+        'bundle_id': session.get('bundle_id'),
+        'terminal_pid': session.get('terminal_pid'),
+        'window_id': session.get('window_id'),
+        'round_count': get_round_count(session_id)
     }
 
 

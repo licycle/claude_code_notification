@@ -10,6 +10,11 @@ struct SessionInfo {
     let currentStatus: String
     let lastActivity: Date
     let createdAt: Date
+    // Window info for terminal jumping
+    let accountAlias: String
+    let bundleId: String?
+    let terminalPid: Int32?
+    let windowId: UInt32?
 }
 
 struct ProgressInfo {
@@ -105,7 +110,8 @@ class DatabaseManager {
 
         var sessions: [SessionInfo] = []
         let query = """
-            SELECT session_id, project, original_goal, current_status, last_activity, created_at
+            SELECT session_id, project, original_goal, current_status, last_activity, created_at,
+                   account_alias, bundle_id, terminal_pid, window_id
             FROM sessions
             WHERE current_status != 'completed'
             ORDER BY last_activity DESC
@@ -126,13 +132,23 @@ class DatabaseManager {
                 let lastActivity = dateFormatter.date(from: String(lastActivityStr.prefix(19))) ?? Date()
                 let createdAt = dateFormatter.date(from: String(createdAtStr.prefix(19))) ?? Date()
 
+                // Window info for terminal jumping
+                let accountAlias = safeString(from: sqlite3_column_text(statement, 6))
+                let bundleId = sqlite3_column_text(statement, 7).map { String(cString: $0) }
+                let terminalPid = sqlite3_column_type(statement, 8) != SQLITE_NULL ? Int32(sqlite3_column_int(statement, 8)) : nil
+                let windowId = sqlite3_column_type(statement, 9) != SQLITE_NULL ? UInt32(sqlite3_column_int(statement, 9)) : nil
+
                 sessions.append(SessionInfo(
                     sessionId: sessionId,
                     project: project,
                     originalGoal: originalGoal,
                     currentStatus: currentStatus,
                     lastActivity: lastActivity,
-                    createdAt: createdAt
+                    createdAt: createdAt,
+                    accountAlias: accountAlias.isEmpty ? "default" : accountAlias,
+                    bundleId: bundleId,
+                    terminalPid: terminalPid,
+                    windowId: windowId
                 ))
             }
         }
@@ -147,7 +163,8 @@ class DatabaseManager {
 
         var sessions: [SessionInfo] = []
         var query = """
-            SELECT session_id, project, original_goal, current_status, last_activity, created_at
+            SELECT session_id, project, original_goal, current_status, last_activity, created_at,
+                   account_alias, bundle_id, terminal_pid, window_id
             FROM sessions
             """
         if !includeCompleted {
@@ -169,13 +186,23 @@ class DatabaseManager {
                 let lastActivity = dateFormatter.date(from: String(lastActivityStr.prefix(19))) ?? Date()
                 let createdAt = dateFormatter.date(from: String(createdAtStr.prefix(19))) ?? Date()
 
+                // Window info for terminal jumping
+                let accountAlias = safeString(from: sqlite3_column_text(statement, 6))
+                let bundleId = sqlite3_column_text(statement, 7).map { String(cString: $0) }
+                let terminalPid = sqlite3_column_type(statement, 8) != SQLITE_NULL ? Int32(sqlite3_column_int(statement, 8)) : nil
+                let windowId = sqlite3_column_type(statement, 9) != SQLITE_NULL ? UInt32(sqlite3_column_int(statement, 9)) : nil
+
                 sessions.append(SessionInfo(
                     sessionId: sessionId,
                     project: project,
                     originalGoal: originalGoal,
                     currentStatus: currentStatus,
                     lastActivity: lastActivity,
-                    createdAt: createdAt
+                    createdAt: createdAt,
+                    accountAlias: accountAlias.isEmpty ? "default" : accountAlias,
+                    bundleId: bundleId,
+                    terminalPid: terminalPid,
+                    windowId: windowId
                 ))
             }
         }
@@ -433,7 +460,8 @@ class DatabaseManager {
         defer { closeDatabase() }
 
         let query = """
-            SELECT session_id, project, original_goal, current_status, last_activity, created_at
+            SELECT session_id, project, original_goal, current_status, last_activity, created_at,
+                   account_alias, bundle_id, terminal_pid, window_id
             FROM sessions
             WHERE session_id = ?
             """
@@ -455,19 +483,54 @@ class DatabaseManager {
                 let lastActivity = dateFormatter.date(from: String(lastActivityStr.prefix(19))) ?? Date()
                 let createdAt = dateFormatter.date(from: String(createdAtStr.prefix(19))) ?? Date()
 
+                // Window info for terminal jumping
+                let accountAlias = safeString(from: sqlite3_column_text(statement, 6))
+                let bundleId = sqlite3_column_text(statement, 7).map { String(cString: $0) }
+                let terminalPid = sqlite3_column_type(statement, 8) != SQLITE_NULL ? Int32(sqlite3_column_int(statement, 8)) : nil
+                let windowId = sqlite3_column_type(statement, 9) != SQLITE_NULL ? UInt32(sqlite3_column_int(statement, 9)) : nil
+
                 result = SessionInfo(
                     sessionId: sessionId,
                     project: project,
                     originalGoal: originalGoal,
                     currentStatus: currentStatus,
                     lastActivity: lastActivity,
-                    createdAt: createdAt
+                    createdAt: createdAt,
+                    accountAlias: accountAlias.isEmpty ? "default" : accountAlias,
+                    bundleId: bundleId,
+                    terminalPid: terminalPid,
+                    windowId: windowId
                 )
             }
         }
         sqlite3_finalize(statement)
 
         return result
+    }
+
+    func getRoundCount(sessionId: String) -> Int {
+        guard openDatabase() else { return 0 }
+        defer { closeDatabase() }
+
+        let query = """
+            SELECT COUNT(*) FROM timeline
+            WHERE session_id = ?
+            AND event_type IN ('goal_set', 'user_input')
+            """
+
+        var statement: OpaquePointer?
+        var count = 0
+
+        if sqlite3_prepare_v2(db, query, -1, &statement, nil) == SQLITE_OK {
+            sqlite3_bind_text(statement, 1, sessionId, -1, nil)
+
+            if sqlite3_step(statement) == SQLITE_ROW {
+                count = Int(sqlite3_column_int(statement, 0))
+            }
+        }
+        sqlite3_finalize(statement)
+
+        return count
     }
 
     func getOverallStatus() -> (status: SessionStatusType, count: Int) {

@@ -10,8 +10,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent))
 
-from utils import read_hook_input, write_hook_output, log, get_project_name
-from services.database import get_session, create_session, add_timeline_event, resolve_pending_decisions
+from utils import read_hook_input, write_hook_output, log, get_project_name, get_env_info
+from services.database import get_session, create_session, add_timeline_event, resolve_pending_decisions, update_session_status
 
 
 def main():
@@ -45,7 +45,20 @@ def main():
         project_name = get_project_name(cwd)
         log("GOAL", f"Creating new session for project: {project_name}")
 
-        create_session(session_id, cwd, prompt)
+        # Get window info for terminal jumping
+        env_info = get_env_info()
+        terminal_pid = int(env_info.get('pid', 0)) or None
+        window_id = int(env_info.get('window_id', 0)) or None
+
+        create_session(
+            session_id=session_id,
+            project=cwd,
+            original_goal=prompt,
+            account_alias=env_info.get('account_alias', 'default'),
+            bundle_id=env_info.get('bundle_id'),
+            terminal_pid=terminal_pid,
+            window_id=window_id
+        )
         log("GOAL", f"Session created with goal: {prompt[:100]}...")
     else:
         # Existing session - record as user input event
@@ -53,6 +66,9 @@ def main():
 
         # Mark any pending decisions as resolved (user responded)
         resolve_pending_decisions(session_id)
+
+        # Update status to working (user is actively interacting)
+        update_session_status(session_id, 'working')
 
         # Add to timeline
         add_timeline_event(

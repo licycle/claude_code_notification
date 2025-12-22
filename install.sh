@@ -447,6 +447,7 @@ cat << EOF > "$CONFIG_FILE"
 _CLAUDE_MON_APP="$BINARY_PATH"
 _CLAUDE_API_MANAGER="$API_MANAGER_SCRIPT"
 _CLAUDE_ACCOUNT_MANAGER="$ACCOUNT_MANAGER_SCRIPT"
+_CLAUDE_HOOKS_DIR="$BASE_DIR"
 
 # --- API Management Command ---
 function claude-api() {
@@ -510,6 +511,9 @@ _claude_wrapper() {
 
         command claude "\${claude_args[@]}"
     )
+
+    # 5. Cleanup on exit (handles ctrl+c and normal exit)
+    python3 "\$_CLAUDE_HOOKS_DIR/task_tracker/hooks/session_cleanup.py" 2>/dev/null &
 }
 EOF
 

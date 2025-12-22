@@ -164,6 +164,7 @@ extension StatusBarController: SessionListViewControllerDelegate {
 
 extension Notification.Name {
     static let showSettingsWindow = Notification.Name("showSettingsWindow")
+    static let jumpToTerminal = Notification.Name("jumpToTerminal")
 }
 
 // MARK: - Session List View Controller
@@ -297,9 +298,8 @@ class SessionListViewController: NSViewController {
         }
 
         var yOffset: CGFloat = 0
-        let cardHeight: CGFloat = 100
+        let cardHeight: CGFloat = 120
         let cardSpacing: CGFloat = 8
-        let cardWidth: CGFloat = 344
 
         for session in sessions {
             let cardView = createSessionCard(session: session, yOffset: yOffset)
@@ -331,7 +331,7 @@ class SessionListViewController: NSViewController {
 
     private func createSessionCard(session: SessionInfo, yOffset: CGFloat) -> NSView {
         let card = SessionCardView(session: session)
-        card.frame = NSRect(x: 8, y: yOffset, width: 344, height: 100)
+        card.frame = NSRect(x: 8, y: yOffset, width: 344, height: 120)
         card.delegate = self
         return card
     }
@@ -345,9 +345,19 @@ extension SessionListViewController: SessionCardViewDelegate {
     }
 
     func sessionCardDidRequestJump(_ session: SessionInfo) {
-        // Jump to terminal - reuse existing logic from AppDelegate
+        // Jump to terminal - post notification for AppDelegate to handle
         log("STATUSBAR: Jump to terminal for session \(session.sessionId)")
-        // TODO: Implement jump to terminal
+
+        // Post notification with session info
+        NotificationCenter.default.post(
+            name: .jumpToTerminal,
+            object: nil,
+            userInfo: [
+                "bundleId": session.bundleId ?? "com.apple.Terminal",
+                "terminalPid": session.terminalPid ?? 0,
+                "windowId": session.windowId ?? 0
+            ]
+        )
     }
 }
 
@@ -362,11 +372,13 @@ class SessionCardView: NSView {
     weak var delegate: SessionCardViewDelegate?
     private let session: SessionInfo
     private var progress: ProgressInfo?
+    private var roundCount: Int = 0
 
     init(session: SessionInfo) {
         self.session = session
         super.init(frame: .zero)
         self.progress = DatabaseManager.shared.getProgress(sessionId: session.sessionId)
+        self.roundCount = DatabaseManager.shared.getRoundCount(sessionId: session.sessionId)
         setupUI()
     }
 
@@ -381,51 +393,56 @@ class SessionCardView: NSView {
         layer?.borderWidth = 1
         layer?.borderColor = NSColor.separatorColor.cgColor
 
-        // Status indicator + Goal
+        // Line 1: Status emoji + Goal (y=90)
         let statusEmoji = getStatusEmoji()
-        let goalText = String(session.originalGoal.prefix(30))
+        let goalText = String(session.originalGoal.prefix(35))
         let titleLabel = NSTextField(labelWithString: "\(statusEmoji) \(goalText)")
         titleLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         titleLabel.lineBreakMode = .byTruncatingTail
-        titleLabel.frame = NSRect(x: 12, y: 70, width: 260, height: 20)
+        titleLabel.frame = NSRect(x: 12, y: 90, width: 320, height: 20)
         addSubview(titleLabel)
 
-        // Project badge
-        let projectLabel = NSTextField(labelWithString: session.project)
+        // Line 2: Project path (y=72)
+        let projectPath = shortenPath(session.project)
+        let projectLabel = NSTextField(labelWithString: "📁 \(projectPath)")
         projectLabel.font = NSFont.systemFont(ofSize: 11)
         projectLabel.textColor = .secondaryLabelColor
-        projectLabel.alignment = .right
-        projectLabel.frame = NSRect(x: 260, y: 70, width: 76, height: 20)
+        projectLabel.lineBreakMode = .byTruncatingMiddle
+        projectLabel.frame = NSRect(x: 12, y: 72, width: 320, height: 16)
         addSubview(projectLabel)
 
-        // Progress bar
-        if let progress = progress, progress.total > 0 {
-            let progressView = createProgressBar(completed: progress.completed, total: progress.total)
-            progressView.frame = NSRect(x: 12, y: 48, width: 320, height: 16)
-            addSubview(progressView)
-        }
+        // Line 3: [account][session_id] R{round} (y=54)
+        let sessionPrefix = String(session.sessionId.prefix(4))
+        let accountTag = session.accountAlias != "default" ? "[\(session.accountAlias)]" : ""
+        let roundTag = roundCount > 0 ? " R\(roundCount)" : ""
+        let infoText = "\(accountTag)[\(sessionPrefix)]\(roundTag)"
+        let infoLabel = NSTextField(labelWithString: infoText)
+        infoLabel.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+        infoLabel.textColor = .tertiaryLabelColor
+        infoLabel.frame = NSRect(x: 12, y: 54, width: 200, height: 16)
+        addSubview(infoLabel)
 
-        // Status text
+        // Line 4: Status text (y=36)
         let statusText = getStatusText()
         let statusLabel = NSTextField(labelWithString: statusText)
         statusLabel.font = NSFont.systemFont(ofSize: 11)
         statusLabel.textColor = getStatusColor()
-        statusLabel.frame = NSRect(x: 12, y: 26, width: 200, height: 16)
+        statusLabel.frame = NSRect(x: 12, y: 36, width: 320, height: 16)
         addSubview(statusLabel)
 
-        // Time ago
+        // Line 5: Time + Jump button (y=12)
         let timeAgo = DatabaseManager.shared.relativeTime(from: session.lastActivity)
         let timeLabel = NSTextField(labelWithString: "⏱️ \(timeAgo)")
         timeLabel.font = NSFont.systemFont(ofSize: 11)
         timeLabel.textColor = .tertiaryLabelColor
-        timeLabel.frame = NSRect(x: 12, y: 8, width: 150, height: 16)
+        timeLabel.frame = NSRect(x: 12, y: 12, width: 150, height: 16)
         addSubview(timeLabel)
 
         // Jump button
         let jumpButton = NSButton(title: "跳转", target: self, action: #selector(jumpToTerminal))
         jumpButton.bezelStyle = .rounded
         jumpButton.controlSize = .small
-        jumpButton.frame = NSRect(x: 280, y: 8, width: 52, height: 22)
+        jumpButton.frame = NSRect(x: 280, y: 10, width: 52, height: 22)
         addSubview(jumpButton)
 
         // Click gesture
@@ -433,35 +450,21 @@ class SessionCardView: NSView {
         addGestureRecognizer(clickGesture)
     }
 
-    private func createProgressBar(completed: Int, total: Int) -> NSView {
-        let container = NSView()
-
-        let percentage = total > 0 ? CGFloat(completed) / CGFloat(total) : 0
-        let barWidth: CGFloat = 280
-        let barHeight: CGFloat = 4
-
-        // Background
-        let bgBar = NSView(frame: NSRect(x: 0, y: 6, width: barWidth, height: barHeight))
-        bgBar.wantsLayer = true
-        bgBar.layer?.backgroundColor = NSColor.systemGray.withAlphaComponent(0.3).cgColor
-        bgBar.layer?.cornerRadius = 2
-        container.addSubview(bgBar)
-
-        // Progress
-        let progressBar = NSView(frame: NSRect(x: 0, y: 6, width: barWidth * percentage, height: barHeight))
-        progressBar.wantsLayer = true
-        progressBar.layer?.backgroundColor = NSColor.systemGreen.cgColor
-        progressBar.layer?.cornerRadius = 2
-        container.addSubview(progressBar)
-
-        // Percentage label
-        let percentLabel = NSTextField(labelWithString: "\(Int(percentage * 100))%")
-        percentLabel.font = NSFont.systemFont(ofSize: 10)
-        percentLabel.textColor = .secondaryLabelColor
-        percentLabel.frame = NSRect(x: 290, y: 2, width: 30, height: 12)
-        container.addSubview(percentLabel)
-
-        return container
+    private func shortenPath(_ path: String) -> String {
+        // Shorten home directory to ~
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        var result = path
+        if result.hasPrefix(home) {
+            result = "~" + result.dropFirst(home.count)
+        }
+        // Truncate if too long
+        if result.count > 40 {
+            let components = result.components(separatedBy: "/")
+            if components.count > 3 {
+                return "~/.../" + components.suffix(2).joined(separator: "/")
+            }
+        }
+        return result
     }
 
     private func getStatusEmoji() -> String {

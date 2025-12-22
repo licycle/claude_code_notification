@@ -39,6 +39,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             object: nil
         )
 
+        // Listen for jump to terminal requests from status bar
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleJumpToTerminal(_:)),
+            name: .jumpToTerminal,
+            object: nil
+        )
+
         // Check if launched from notification click after a short delay
         // If no notification event received, this is a user-initiated launch (click app icon)
         // 0.3s to ensure notification callback has time to fire
@@ -89,6 +97,25 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
     @objc func handleShowSettingsWindow() {
         showSettingsWindow()
+    }
+
+    @objc func handleJumpToTerminal(_ notification: Notification) {
+        guard let userInfo = notification.userInfo else {
+            log("JUMP: No userInfo in notification")
+            return
+        }
+
+        let bundleId = userInfo["bundleId"] as? String ?? "com.apple.Terminal"
+        let terminalPid = userInfo["terminalPid"] as? Int32 ?? 0
+        let windowId = userInfo["windowId"] as? UInt32 ?? 0
+
+        log("JUMP: Jumping to terminal bundleId=\(bundleId) pid=\(terminalPid) windowId=\(windowId)")
+
+        if terminalPid > 0 {
+            activateAppByPID(pid: terminalPid, cgWindowID: windowId, fallbackBundle: bundleId)
+        } else {
+            activateApp(bundleID: bundleId)
+        }
     }
 
     // MARK: - Handle Notification Click and Actions
