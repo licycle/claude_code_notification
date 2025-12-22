@@ -105,7 +105,11 @@ class DatabaseManager {
     // MARK: - Query Methods
 
     func getActiveSessions() -> [SessionInfo] {
-        guard openDatabase() else { return [] }
+        log("DATABASE: getActiveSessions() called")
+        guard openDatabase() else {
+            log("DATABASE: Failed to open database")
+            return []
+        }
         defer { closeDatabase() }
 
         var sessions: [SessionInfo] = []
@@ -118,6 +122,7 @@ class DatabaseManager {
             LIMIT 20
             """
 
+        log("DATABASE: Executing query for active sessions")
         var statement: OpaquePointer?
         if sqlite3_prepare_v2(db, query, -1, &statement, nil) == SQLITE_OK {
             while sqlite3_step(statement) == SQLITE_ROW {
@@ -138,6 +143,7 @@ class DatabaseManager {
                 let terminalPid = sqlite3_column_type(statement, 8) != SQLITE_NULL ? Int32(sqlite3_column_int(statement, 8)) : nil
                 let windowId = sqlite3_column_type(statement, 9) != SQLITE_NULL ? UInt32(sqlite3_column_int(statement, 9)) : nil
 
+                log("DATABASE: Found session id=\(sessionId.prefix(8)) status=\(currentStatus) goal=\(originalGoal.prefix(30))")
                 sessions.append(SessionInfo(
                     sessionId: sessionId,
                     project: project,
@@ -154,6 +160,7 @@ class DatabaseManager {
         }
         sqlite3_finalize(statement)
 
+        log("DATABASE: getActiveSessions() returning \(sessions.count) sessions")
         return sessions
     }
 

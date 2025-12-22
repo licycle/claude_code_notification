@@ -433,6 +433,128 @@ def cleanup_old_sessions(days: int = 7) -> int:
 
 
 # ============================================================================
+# Pending Session Support (for pre-prompt idle state)
+# ============================================================================
+
+def create_pending_session(
+    pending_id: str,
+    project: str,
+    account_alias: str = 'default',
+    bundle_id: str = None,
+    terminal_pid: int = None,
+    window_id: int = None
+) -> None:
+    """
+    Create a pending session before user submits first prompt.
+    This allows the status bar to show 'idle' state immediately when Claude starts.
+
+    The pending_id is a temporary UUID that will be replaced with the real session_id
+    when UserPromptSubmit hook fires.
+    """
+    now = datetime.now().isoformat()
+    # Use pending_id as session_id with special prefix
+    session_id = f"pending_{pending_id}"
+
+    with get_connection() as conn:
+        # Check if pending session already exists for this project (cleanup stale ones)
+        conn.execute(
+            """DELETE FROM sessions
+               WHERE session_id LIKE 'pending_%'
+               AND project = ?
+               AND julianday('now') - julianday(created_at) > 0.01""",  # > ~15 minutes
+            (project,)
+        )
+
+        conn.execute(
+            """INSERT OR REPLACE INTO sessions
+               (session_id, project, original_goal, current_status, created_at, last_activity,
+                account_alias, bundle_id, terminal_pid, window_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (session_id, project, '等待输入...', 'idle', now, now,
+             account_alias, bundle_id, terminal_pid, window_id)
+        )
+        # Initialize progress
+        conn.execute(
+            """INSERT OR IGNORE INTO progress (session_id) VALUES (?)""",
+            (session_id,)
+        )
+
+
+def link_pending_session(pending_id: str, real_session_id: str, project: str) -> bool:
+    """
+    Link a pending session to the real session_id.
+    Called when UserPromptSubmit hook fires with the real session_id.
+
+    Returns True if a pending session was found and linked, False otherwise.
+    """
+    pending_session_id = f"pending_{pending_id}"
+
+    with get_connection() as conn:
+        # Check if pending session exists
+        cursor = conn.execute(
+            "SELECT * FROM sessions WHERE session_id = ? AND project = ?",
+            (pending_session_id, project)
+        )
+        pending = cursor.fetchone()
+
+        if not pending:
+            return False
+
+        # Update session_id in all related tables
+        now = datetime.now().isoformat()
+
+        # Update sessions table
+        conn.execute(
+            """UPDATE sessions SET session_id = ?, last_activity = ?
+               WHERE session_id = ?""",
+            (real_session_id, now, pending_session_id)
+        )
+
+        # Update progress table
+        conn.execute(
+            """UPDATE progress SET session_id = ?
+               WHERE session_id = ?""",
+            (real_session_id, pending_session_id)
+        )
+
+        # Update timeline table
+        conn.execute(
+            """UPDATE timeline SET session_id = ?
+               WHERE session_id = ?""",
+            (real_session_id, pending_session_id)
+        )
+
+        # Update pending_decisions table
+        conn.execute(
+            """UPDATE pending_decisions SET session_id = ?
+               WHERE session_id = ?""",
+            (real_session_id, pending_session_id)
+        )
+
+        # Update snapshots table
+        conn.execute(
+            """UPDATE snapshots SET session_id = ?
+               WHERE session_id = ?""",
+            (real_session_id, pending_session_id)
+        )
+
+        return True
+
+
+def get_pending_session_by_project(project: str) -> Optional[Dict]:
+    """Get pending session for a project if exists"""
+    with get_connection() as conn:
+        cursor = conn.execute(
+            """SELECT * FROM sessions
+               WHERE session_id LIKE 'pending_%' AND project = ?
+               ORDER BY created_at DESC LIMIT 1""",
+            (project,)
+        )
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
+# ============================================================================
 # Timeline Node Aggregation (v2 UI Support)
 # ============================================================================
 

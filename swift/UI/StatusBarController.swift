@@ -284,7 +284,12 @@ class SessionListViewController: NSViewController {
         if !isViewLoaded {
             _ = view  // 触发 loadView
         }
+        log("SESSIONLIST: refresh() called")
         sessions = DatabaseManager.shared.getActiveSessions()
+        log("SESSIONLIST: Got \(sessions.count) sessions from database")
+        for (index, session) in sessions.enumerated() {
+            log("SESSIONLIST: [\(index)] id=\(session.sessionId.prefix(8)) status=\(session.currentStatus)")
+        }
         updateSessionList()
     }
 
@@ -519,6 +524,8 @@ class SessionCardView: NSView {
     }
 
     @objc private func jumpToTerminal() {
+        log("SESSIONCARD: jumpToTerminal clicked for session \(session.sessionId.prefix(8))")
+        log("SESSIONCARD: bundleId=\(session.bundleId ?? "nil") pid=\(session.terminalPid ?? 0) windowId=\(session.windowId ?? 0)")
         delegate?.sessionCardDidRequestJump(session)
     }
 

@@ -43,6 +43,7 @@ if [ "$1" = "--hooks-only" ] || [ "$1" = "-p" ]; then
     cp "$TRACKER_SRC/hooks/notification_tracker.py" "$TRACKER_DIR/hooks/"
     cp "$TRACKER_SRC/hooks/snapshot_hook.py" "$TRACKER_DIR/hooks/"
     cp "$TRACKER_SRC/hooks/session_cleanup.py" "$TRACKER_DIR/hooks/"
+    cp "$TRACKER_SRC/hooks/session_init.py" "$TRACKER_DIR/hooks/"
     cp "$TRACKER_SRC/hooks/__init__.py" "$TRACKER_DIR/hooks/" 2>/dev/null || true
     chmod +x "$TRACKER_DIR/hooks/"*.py
 
@@ -353,6 +354,7 @@ else
         cp "$TRACKER_SRC/hooks/notification_tracker.py" "$TRACKER_DIR/hooks/"
         cp "$TRACKER_SRC/hooks/snapshot_hook.py" "$TRACKER_DIR/hooks/"
         cp "$TRACKER_SRC/hooks/session_cleanup.py" "$TRACKER_DIR/hooks/"
+        cp "$TRACKER_SRC/hooks/session_init.py" "$TRACKER_DIR/hooks/"
         cp "$TRACKER_SRC/hooks/__init__.py" "$TRACKER_DIR/hooks/" 2>/dev/null || touch "$TRACKER_DIR/hooks/__init__.py"
 
         # Make hooks executable
@@ -476,6 +478,9 @@ _claude_wrapper() {
     local detected_pid=\$(echo "\$detected_info" | cut -d'|' -f2)
     local detected_window_id=\$(echo "\$detected_info" | cut -d'|' -f3)
 
+    # 2. Generate pending session ID (UUID)
+    local pending_id=\$(uuidgen | tr '[:upper:]' '[:lower:]')
+
     # 3. Parse Arguments
     local -a claude_args
     local api_profile=""
@@ -510,6 +515,10 @@ _claude_wrapper() {
         export CLAUDE_CG_WINDOW_ID="\${detected_window_id:-0}"
         export CLAUDE_CONFIG_DIR="\$config_path"
         export CLAUDE_ACCOUNT_ALIAS="\$account_alias"
+        export CLAUDE_PENDING_SESSION_ID="\$pending_id"
+
+        # Create pending session BEFORE starting Claude (shows 'idle' in status bar)
+        python3 "\$_CLAUDE_HOOKS_DIR/task_tracker/hooks/session_init.py" 2>/dev/null
 
         command claude "\${claude_args[@]}"
     )

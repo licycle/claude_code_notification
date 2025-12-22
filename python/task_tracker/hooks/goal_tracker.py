@@ -4,6 +4,7 @@ goal_tracker.py - UserPromptSubmit Hook
 Captures user's original goal when a new session starts
 """
 import sys
+import os
 from pathlib import Path
 
 # Add parent paths for imports
@@ -11,7 +12,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent))
 
 from utils import read_hook_input, write_hook_output, log, get_project_name, get_env_info
-from services.database import get_session, create_session, add_timeline_event, resolve_pending_decisions, update_session_status
+from services.database import (
+    get_session, create_session, add_timeline_event, resolve_pending_decisions,
+    update_session_status, link_pending_session
+)
 
 
 def main():
@@ -36,6 +40,36 @@ def main():
         return
 
     log("GOAL", f"Session: {session_id}, Prompt length: {len(prompt)}")
+
+    # Check for pending session to link
+    pending_id = os.environ.get('CLAUDE_PENDING_SESSION_ID', '')
+    if pending_id:
+        log("GOAL", f"Found pending_id: {pending_id[:8]}..., attempting to link")
+        linked = link_pending_session(pending_id, session_id, cwd)
+        if linked:
+            log("GOAL", f"Successfully linked pending session to {session_id}")
+            # Update the linked session with the real goal and status
+            session = get_session(session_id)
+            if session:
+                # Update goal and status
+                from services.database import get_connection
+                from datetime import datetime
+                now = datetime.now().isoformat()
+                with get_connection() as conn:
+                    conn.execute(
+                        """UPDATE sessions SET original_goal = ?, current_status = ?, last_activity = ?
+                           WHERE session_id = ?""",
+                        (prompt, 'working', now, session_id)
+                    )
+                    # Add goal_set event to timeline
+                    conn.execute(
+                        """INSERT INTO timeline (session_id, event_type, content, timestamp)
+                           VALUES (?, 'goal_set', ?, ?)""",
+                        (session_id, prompt, now)
+                    )
+                log("GOAL", f"Updated linked session with goal: {prompt[:100]}...")
+                write_hook_output()
+                return
 
     # Check if session already exists
     session = get_session(session_id)
