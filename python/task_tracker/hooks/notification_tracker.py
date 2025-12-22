@@ -10,8 +10,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent))
 
-from utils import read_hook_input, write_hook_output, log, get_project_name
-from services.database import get_session, update_session_status, get_progress, get_latest_user_input
+from utils import (
+    read_hook_input, write_hook_output, log, get_project_name,
+    parse_transcript, extract_all_user_messages, get_user_round_count
+)
+from services.database import get_session, update_session_status, get_progress
 from services.notification import (
     notify_task_idle, notify_decision_needed, notify_permission_needed
 )
@@ -27,6 +30,7 @@ def main():
     notification_type = input_data.get('notification_type', '')
     message = input_data.get('message', '')
     cwd = input_data.get('cwd', '')
+    transcript_path = input_data.get('transcript_path', '')
 
     if not session_id:
         log("NOTIF", "No session_id, exiting")
@@ -52,7 +56,7 @@ def main():
 
     # Handle different notification types
     if notification_type == 'idle_prompt':
-        handle_idle(session_id, project_name, original_goal, completed, total)
+        handle_idle(session_id, project_name, original_goal, completed, total, transcript_path)
 
     elif notification_type == 'elicitation_dialog':
         handle_elicitation(session_id, project_name, message, completed, total)
@@ -83,15 +87,26 @@ def main():
 
 
 def handle_idle(session_id: str, project_name: str, original_goal: str,
-                completed: int, total: int):
+                completed: int, total: int, transcript_path: str = None):
     """Handle idle_prompt - Claude is waiting for input"""
     log("NOTIF", "Handling idle state")
 
     # Update session status
     update_session_status(session_id, 'idle')
 
-    # Get latest user input from timeline
-    latest_user_input = get_latest_user_input(session_id)
+    # Get latest user input from transcript (more reliable than database)
+    latest_user_input = None
+    round_count = 0
+    if transcript_path:
+        events = parse_transcript(transcript_path)
+        all_user_messages = extract_all_user_messages(events)
+        latest_user_input = all_user_messages[-1] if all_user_messages else None
+        round_count = get_user_round_count(events)
+        log("NOTIF", f"From transcript: {len(all_user_messages)} user messages, round {round_count}")
+
+    if not latest_user_input:
+        latest_user_input = original_goal
+
     log("NOTIF", f"Latest user input: {latest_user_input[:50] if latest_user_input else 'None'}...")
 
     # Generate summary for consistent mode display
@@ -100,7 +115,7 @@ def handle_idle(session_id: str, project_name: str, original_goal: str,
         'original_goal': original_goal,
         'completed': completed,
         'total': total,
-        'last_user_message': latest_user_input or original_goal  # Use latest input for RAW mode
+        'last_user_message': latest_user_input  # Use latest input for RAW mode
     }
     summary = summary_service.summarize(context)
 
@@ -111,7 +126,8 @@ def handle_idle(session_id: str, project_name: str, original_goal: str,
         original_goal=original_goal,
         completed=completed,
         total=total,
-        summary=summary
+        summary=summary,
+        round_count=round_count
     )
 
 

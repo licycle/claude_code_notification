@@ -96,6 +96,7 @@ class ThirdPartyProvider(SummaryProvider):
         try:
             import urllib.request
             import urllib.error
+            import ssl
 
             prompt = self._build_prompt(context)
 
@@ -118,7 +119,12 @@ class ThirdPartyProvider(SummaryProvider):
                 }
             )
 
-            with urllib.request.urlopen(req, timeout=self.timeout) as response:
+            # Create SSL context that doesn't verify certificates (for proxy environments)
+            ssl_context = ssl.create_default_context()
+            ssl_context.check_hostname = False
+            ssl_context.verify_mode = ssl.CERT_NONE
+
+            with urllib.request.urlopen(req, timeout=self.timeout, context=ssl_context) as response:
                 result = json.loads(response.read().decode('utf-8'))
                 content = result['choices'][0]['message']['content']
                 parsed = self._parse_response(content)

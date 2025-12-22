@@ -123,6 +123,44 @@ def parse_transcript(transcript_path: str) -> List[Dict]:
     return events
 
 
+def strip_xml_tags(text: str) -> str:
+    """Strip all system-injected XML tags from text.
+
+    Removes tags like:
+    - <system-reminder>...</system-reminder>
+    - <bash-notification>...</bash-notification>
+    - <user-prompt-submit-hook>...</user-prompt-submit-hook>
+    - And other similar system tags
+    """
+    if not text:
+        return text
+
+    # List of known system XML tags to remove (with content)
+    system_tags = [
+        'system-reminder',
+        'bash-notification',
+        'user-prompt-submit-hook',
+        'shell-id',
+        'status',
+        'output',
+        'retrieval_status',
+        'task_id',
+        'task_type',
+        'exit_code',
+    ]
+
+    result = text
+    for tag in system_tags:
+        # Remove tag with content: <tag>...</tag>
+        result = re.sub(rf'<{tag}>[\s\S]*?</{tag}>', '', result, flags=re.IGNORECASE)
+        # Remove self-closing tags: <tag/>
+        result = re.sub(rf'<{tag}\s*/>', '', result, flags=re.IGNORECASE)
+
+    # Clean up extra whitespace
+    result = re.sub(r'\n{3,}', '\n\n', result)
+    return result.strip()
+
+
 def _extract_user_message_from_system_reminder(text: str) -> Optional[str]:
     """Extract user message from system-reminder or tool_result content.
 
@@ -170,8 +208,8 @@ def extract_all_user_messages(events: List[Dict]) -> List[str]:
         if event_type == 'user':
             content = event.get('message', {}).get('content', '')
             if isinstance(content, str) and content.strip():
-                # Clean system reminders
-                clean = re.sub(r'<system-reminder>[\s\S]*?</system-reminder>', '', content).strip()
+                # Clean all system XML tags
+                clean = strip_xml_tags(content)
                 if clean:
                     messages.append(clean)
 
@@ -228,10 +266,9 @@ def extract_last_message(events: List[Dict], msg_type: str, strip_system_reminde
             if isinstance(content, str):
                 text = content.strip()
                 if text:  # Only return non-empty strings
-                    # Strip system reminders if requested
+                    # Strip system XML tags if requested
                     if strip_system_reminders:
-                        text = re.sub(r'<system-reminder>[\s\S]*?</system-reminder>', '', text)
-                        text = re.sub(r'\n{3,}', '\n\n', text).strip()
+                        text = strip_xml_tags(text)
                     return text
                 continue  # Empty string, keep searching
 
@@ -250,10 +287,9 @@ def extract_last_message(events: List[Dict], msg_type: str, strip_system_reminde
                 ])
 
                 if text.strip():  # Only return non-empty text
-                    # Strip system reminders if requested
+                    # Strip system XML tags if requested
                     if strip_system_reminders:
-                        text = re.sub(r'<system-reminder>[\s\S]*?</system-reminder>', '', text)
-                        text = re.sub(r'\n{3,}', '\n\n', text).strip()
+                        text = strip_xml_tags(text)
                     return text
                 continue  # Empty text, keep searching
             else:

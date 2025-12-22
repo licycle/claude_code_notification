@@ -46,7 +46,9 @@
       "Bash(TRANSCRIPT=\"/Users/wukangda/.claude/projects/-Users-wukangda-Desktop-claude-notification/97f39cae-8b7b-4f98-8f27-3db46884ddb8.jsonl\" echo \"=== 搜索包含 ''''The user sent'''' 的内容 ===\" grep -o '\"\"\"\"The user sent[^\"\"\"\"]*\"\"\"\"' \"$TRANSCRIPT\")",
       "Bash(TRANSCRIPT=\"/Users/wukangda/.claude/projects/-Users-wukangda-Desktop-claude-notification/97f39cae-8b7b-4f98-8f27-3db46884ddb8.jsonl\" echo \"=== 搜索 ''''user sent the following message'''' ===\" grep -i \"user sent the following message\" \"$TRANSCRIPT\")",
       "Bash(TRANSCRIPT=\"/Users/wukangda/.claude/projects/-Users-wukangda-Desktop-claude-notification/97f39cae-8b7b-4f98-8f27-3db46884ddb8.jsonl\" echo \"=== 直接搜索 git 查看 ===\" grep -c \"git\" \"$TRANSCRIPT\" echo \"\" echo \"=== 搜索 deepwiki ===\" grep \"deepwiki\" \"$TRANSCRIPT\")",
-      "Bash(TRANSCRIPT=\"/Users/wukangda/.claude/projects/-Users-wukangda-Desktop-claude-notification/97f39cae-8b7b-4f98-8f27-3db46884ddb8.jsonl\" echo \"=== 所有包含 ''''user sent'''' 的内容 ===\" grep -o \"user sent the following message[^P]*Please\" \"$TRANSCRIPT\")"
+      "Bash(TRANSCRIPT=\"/Users/wukangda/.claude/projects/-Users-wukangda-Desktop-claude-notification/97f39cae-8b7b-4f98-8f27-3db46884ddb8.jsonl\" echo \"=== 所有包含 ''''user sent'''' 的内容 ===\" grep -o \"user sent the following message[^P]*Please\" \"$TRANSCRIPT\")",
+      "Bash(defaults read:*)",
+      "Bash(defaults:*)"
     ]
   }
 }

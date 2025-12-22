@@ -6,61 +6,82 @@ import UserNotifications
 class SettingsManager {
     static let shared = SettingsManager()
 
-    private let defaults = UserDefaults.standard
-
-    // Keys
-    private let kSummaryEnabled = "summaryAIEnabled"
-    private let kSummaryBaseURL = "summaryBaseURL"
-    private let kSummaryAPIKey = "summaryAPIKey"
-    private let kSummaryModel = "summaryModel"
-
-    // Config file path for Python to read
+    // Config file path - single source of truth for both Swift and Python
     private var configFilePath: URL {
         let dir = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".claude-task-tracker")
         return dir.appendingPathComponent("config.json")
     }
 
+    // In-memory cache (loaded from config.json)
+    private var _summaryEnabled: Bool = false
+    private var _summaryBaseURL: String = ""
+    private var _summaryAPIKey: String = ""
+    private var _summaryModel: String = "gpt-3.5-turbo"
+
     var summaryEnabled: Bool {
-        get { defaults.bool(forKey: kSummaryEnabled) }
-        set {
-            defaults.set(newValue, forKey: kSummaryEnabled)
-            syncConfigToFile()
-        }
+        get { _summaryEnabled }
+        set { _summaryEnabled = newValue }
     }
 
     var summaryBaseURL: String {
-        get { defaults.string(forKey: kSummaryBaseURL) ?? "" }
-        set {
-            defaults.set(newValue, forKey: kSummaryBaseURL)
-            syncConfigToFile()
-        }
+        get { _summaryBaseURL }
+        set { _summaryBaseURL = newValue }
     }
 
     var summaryAPIKey: String {
-        get { defaults.string(forKey: kSummaryAPIKey) ?? "" }
-        set {
-            defaults.set(newValue, forKey: kSummaryAPIKey)
-            syncConfigToFile()
-        }
+        get { _summaryAPIKey }
+        set { _summaryAPIKey = newValue }
     }
 
     var summaryModel: String {
-        get { defaults.string(forKey: kSummaryModel) ?? "gpt-3.5-turbo" }
-        set {
-            defaults.set(newValue, forKey: kSummaryModel)
-            syncConfigToFile()
+        get { _summaryModel }
+        set { _summaryModel = newValue }
+    }
+
+    private init() {
+        loadFromFile()
+    }
+
+    /// Load config from config.json
+    func loadFromFile() {
+        guard FileManager.default.fileExists(atPath: configFilePath.path) else {
+            log("Config file not found, using defaults")
+            return
+        }
+
+        do {
+            let data = try Data(contentsOf: configFilePath)
+            guard let config = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                return
+            }
+
+            if let summary = config["summary"] as? [String: Any] {
+                // Check if enabled
+                let provider = summary["provider"] as? String ?? "disabled"
+                _summaryEnabled = (provider == "third_party")
+
+                // Load third_party config
+                if let thirdParty = summary["third_party"] as? [String: Any] {
+                    _summaryBaseURL = thirdParty["base_url"] as? String ?? ""
+                    _summaryAPIKey = thirdParty["api_key"] as? String ?? ""
+                    _summaryModel = thirdParty["model"] as? String ?? "gpt-3.5-turbo"
+                }
+            }
+
+            log("Config loaded from \(configFilePath.path)")
+        } catch {
+            log("Failed to load config: \(error)")
         }
     }
 
-    private init() {}
-
-    func syncConfigToFile() {
+    /// Save config to config.json (called explicitly by Save button)
+    func saveToFile() {
         do {
             let dir = configFilePath.deletingLastPathComponent()
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
 
-            // Read existing config or create new
+            // Read existing config to preserve other settings
             var config: [String: Any] = [:]
             if FileManager.default.fileExists(atPath: configFilePath.path) {
                 if let data = try? Data(contentsOf: configFilePath),
@@ -69,20 +90,19 @@ class SettingsManager {
                 }
             }
 
-            // Update summary section
+            // Build summary config
             var summaryConfig: [String: Any] = [:]
 
-            if summaryEnabled && !summaryAPIKey.isEmpty {
+            if _summaryEnabled && !_summaryAPIKey.isEmpty {
                 summaryConfig["provider"] = "third_party"
                 summaryConfig["third_party"] = [
                     "enabled": true,
-                    "base_url": summaryBaseURL,
-                    "api_key": summaryAPIKey,
-                    "model": summaryModel,
+                    "base_url": _summaryBaseURL,
+                    "api_key": _summaryAPIKey,
+                    "model": _summaryModel,
                     "max_tokens": 500
                 ]
             } else {
-                // Disabled - use raw display mode
                 summaryConfig["provider"] = "disabled"
                 summaryConfig["disabled"] = true
             }
@@ -93,16 +113,16 @@ class SettingsManager {
             let data = try JSONSerialization.data(withJSONObject: config, options: .prettyPrinted)
             try data.write(to: configFilePath)
 
-            log("Settings synced to \(configFilePath.path)")
+            log("Config saved to \(configFilePath.path)")
         } catch {
-            log("Failed to sync settings: \(error)")
+            log("Failed to save config: \(error)")
         }
     }
 }
 
 // MARK: - Settings Window Controller
 
-class SettingsWindowController: NSWindowController {
+class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
 
     private var notificationStatusLabel: NSTextField!
     private var accessibilityStatusLabel: NSTextField!
@@ -119,9 +139,14 @@ class SettingsWindowController: NSWindowController {
     private var summaryModelField: NSTextField!
     private var summaryConfigContainer: NSView!
 
+    // New buttons for save and test
+    private var saveAPIConfigButton: NSButton!
+    private var testAPIButton: NSButton!
+    private var apiStatusLabel: NSTextField!
+
     convenience init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 480, height: 520),
+            contentRect: NSRect(x: 0, y: 0, width: 480, height: 580),
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
@@ -143,7 +168,7 @@ class SettingsWindowController: NSWindowController {
         containerView.autoresizingMask = [.width, .height]
         contentView.addSubview(containerView)
 
-        var yOffset: CGFloat = 470
+        var yOffset: CGFloat = 530
 
         // ========== Permission Status Section ==========
         let titleLabel = NSTextField(labelWithString: "Permission Status")
@@ -214,10 +239,10 @@ class SettingsWindowController: NSWindowController {
         yOffset -= 25
 
         // Config container (shown only when enabled)
-        summaryConfigContainer = NSView(frame: NSRect(x: 20, y: yOffset - 120, width: 440, height: 130))
+        summaryConfigContainer = NSView(frame: NSRect(x: 20, y: yOffset - 180, width: 440, height: 190))
         containerView.addSubview(summaryConfigContainer)
 
-        var configY: CGFloat = 100
+        var configY: CGFloat = 155
 
         // Base URL
         let baseURLLabel = NSTextField(labelWithString: "Base URL:")
@@ -229,8 +254,6 @@ class SettingsWindowController: NSWindowController {
         summaryBaseURLField.placeholderString = "https://api.openai.com/v1"
         summaryBaseURLField.isEditable = true
         summaryBaseURLField.isSelectable = true
-        summaryBaseURLField.target = self
-        summaryBaseURLField.action = #selector(summaryConfigChanged)
         summaryConfigContainer.addSubview(summaryBaseURLField)
         configY -= 35
 
@@ -265,11 +288,28 @@ class SettingsWindowController: NSWindowController {
         summaryModelField.placeholderString = "gpt-3.5-turbo"
         summaryModelField.isEditable = true
         summaryModelField.isSelectable = true
-        summaryModelField.target = self
-        summaryModelField.action = #selector(summaryConfigChanged)
         summaryConfigContainer.addSubview(summaryModelField)
+        configY -= 40
 
-        yOffset -= 150
+        // Save and Test API buttons
+        saveAPIConfigButton = NSButton(title: "Save", target: self, action: #selector(saveAPIConfig))
+        saveAPIConfigButton.bezelStyle = .rounded
+        saveAPIConfigButton.frame = NSRect(x: 90, y: configY, width: 80, height: 28)
+        summaryConfigContainer.addSubview(saveAPIConfigButton)
+
+        testAPIButton = NSButton(title: "Test API", target: self, action: #selector(testAPIConnection))
+        testAPIButton.bezelStyle = .rounded
+        testAPIButton.frame = NSRect(x: 180, y: configY, width: 100, height: 28)
+        summaryConfigContainer.addSubview(testAPIButton)
+        configY -= 30
+
+        // API status label
+        apiStatusLabel = NSTextField(labelWithString: "")
+        apiStatusLabel.font = NSFont.systemFont(ofSize: 11)
+        apiStatusLabel.frame = NSRect(x: 90, y: configY, width: 340, height: 16)
+        summaryConfigContainer.addSubview(apiStatusLabel)
+
+        yOffset -= 210
 
         // Separator
         let separator2 = NSBox(frame: NSRect(x: 20, y: yOffset, width: 440, height: 1))
@@ -329,12 +369,157 @@ class SettingsWindowController: NSWindowController {
         let settings = SettingsManager.shared
         settings.summaryEnabled = summaryEnabledCheckbox.state == .on
         updateSummaryConfigVisibility()
+        // Note: Don't auto-save, user must click Save button
     }
 
-    @objc func summaryConfigChanged() {
+    @objc func saveAPIConfig() {
         let settings = SettingsManager.shared
-        settings.summaryBaseURL = summaryBaseURLField.stringValue
-        settings.summaryModel = summaryModelField.stringValue.isEmpty ? "gpt-3.5-turbo" : summaryModelField.stringValue
+
+        // Get values from fields
+        let baseURL = summaryBaseURLField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        let model = summaryModelField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Validate
+        if baseURL.isEmpty {
+            apiStatusLabel.stringValue = "⚠️ Base URL is required"
+            apiStatusLabel.textColor = .systemOrange
+            return
+        }
+
+        if actualAPIKey.isEmpty {
+            apiStatusLabel.stringValue = "⚠️ API Key is required"
+            apiStatusLabel.textColor = .systemOrange
+            return
+        }
+
+        // Update in-memory settings
+        settings.summaryEnabled = summaryEnabledCheckbox.state == .on
+        settings.summaryBaseURL = baseURL
+        settings.summaryAPIKey = actualAPIKey
+        settings.summaryModel = model.isEmpty ? "gpt-3.5-turbo" : model
+
+        // Save to config.json (the single source of truth)
+        settings.saveToFile()
+
+        apiStatusLabel.stringValue = "✓ Saved to config.json"
+        apiStatusLabel.textColor = .systemGreen
+
+        log("API config saved: baseURL=\(baseURL), model=\(model.isEmpty ? "gpt-3.5-turbo" : model)")
+    }
+
+    @objc func testAPIConnection() {
+        let baseURL = summaryBaseURLField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        let model = summaryModelField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Validate inputs
+        if baseURL.isEmpty {
+            apiStatusLabel.stringValue = "⚠️ Please enter Base URL first"
+            apiStatusLabel.textColor = .systemOrange
+            return
+        }
+
+        if actualAPIKey.isEmpty {
+            apiStatusLabel.stringValue = "⚠️ Please enter API Key first"
+            apiStatusLabel.textColor = .systemOrange
+            return
+        }
+
+        // Disable button and show testing status
+        testAPIButton.isEnabled = false
+        testAPIButton.title = "Testing..."
+        apiStatusLabel.stringValue = "🔄 Testing API connection..."
+        apiStatusLabel.textColor = .secondaryLabelColor
+
+        // Build API URL
+        let apiURL = baseURL.hasSuffix("/") ? "\(baseURL)chat/completions" : "\(baseURL)/chat/completions"
+
+        // Create test request
+        guard let url = URL(string: apiURL) else {
+            testAPIButton.isEnabled = true
+            testAPIButton.title = "Test API"
+            apiStatusLabel.stringValue = "✗ Invalid URL format"
+            apiStatusLabel.textColor = .systemRed
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(actualAPIKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 30
+
+        // Simple test payload
+        let testPayload: [String: Any] = [
+            "model": model.isEmpty ? "gpt-3.5-turbo" : model,
+            "messages": [
+                ["role": "user", "content": "Hi"]
+            ],
+            "max_tokens": 5
+        ]
+
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: testPayload)
+        } catch {
+            testAPIButton.isEnabled = true
+            testAPIButton.title = "Test API"
+            apiStatusLabel.stringValue = "✗ Failed to create request"
+            apiStatusLabel.textColor = .systemRed
+            return
+        }
+
+        // Execute request
+        let task = URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            DispatchQueue.main.async {
+                self?.testAPIButton.isEnabled = true
+                self?.testAPIButton.title = "Test API"
+
+                if let error = error {
+                    let errorMsg = error.localizedDescription
+                    if errorMsg.contains("timed out") {
+                        self?.apiStatusLabel.stringValue = "✗ Connection timeout"
+                    } else if errorMsg.contains("Could not connect") {
+                        self?.apiStatusLabel.stringValue = "✗ Cannot connect to server"
+                    } else {
+                        self?.apiStatusLabel.stringValue = "✗ \(errorMsg.prefix(50))"
+                    }
+                    self?.apiStatusLabel.textColor = .systemRed
+                    return
+                }
+
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    self?.apiStatusLabel.stringValue = "✗ Invalid response"
+                    self?.apiStatusLabel.textColor = .systemRed
+                    return
+                }
+
+                if httpResponse.statusCode == 200 {
+                    self?.apiStatusLabel.stringValue = "✓ API connection successful!"
+                    self?.apiStatusLabel.textColor = .systemGreen
+                    log("API test successful")
+                } else if httpResponse.statusCode == 401 {
+                    self?.apiStatusLabel.stringValue = "✗ Invalid API Key (401)"
+                    self?.apiStatusLabel.textColor = .systemRed
+                } else if httpResponse.statusCode == 404 {
+                    self?.apiStatusLabel.stringValue = "✗ Endpoint not found (404) - check Base URL"
+                    self?.apiStatusLabel.textColor = .systemRed
+                } else if httpResponse.statusCode == 429 {
+                    self?.apiStatusLabel.stringValue = "⚠️ Rate limited (429) - but API key is valid"
+                    self?.apiStatusLabel.textColor = .systemOrange
+                } else {
+                    // Try to get error message from response
+                    var errorDetail = ""
+                    if let data = data,
+                       let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                       let errorObj = json["error"] as? [String: Any],
+                       let message = errorObj["message"] as? String {
+                        errorDetail = ": \(message.prefix(40))"
+                    }
+                    self?.apiStatusLabel.stringValue = "✗ Error \(httpResponse.statusCode)\(errorDetail)"
+                    self?.apiStatusLabel.textColor = .systemRed
+                }
+            }
+        }
+        task.resume()
     }
 
     @objc func toggleAPIKeyVisibility() {
