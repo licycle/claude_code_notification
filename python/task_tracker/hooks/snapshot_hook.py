@@ -202,7 +202,11 @@ def main():
     }
 
     summary = summary_service.summarize(context)
-    log("SNAPSHOT", f"Summary generated: {summary.get('current_task', '')[:50]}")
+    summary_mode = summary.get('mode', 'unknown')
+    fallback_reason = summary.get('fallback_reason')
+    if fallback_reason:
+        log("SNAPSHOT", f"Summary fallback to raw: {fallback_reason}")
+    log("SNAPSHOT", f"Summary mode={summary_mode}: {summary.get('current_task', '')[:50]}")
 
     # Save snapshot to database
     save_snapshot(session_id, last_user, last_assistant, summary)

@@ -6,13 +6,24 @@ Supports multiple providers: Third-party API, Claude Session, Extraction Only
 import json
 import subprocess
 import os
+import socket
+import sys
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Dict, Optional
 
+# Add parent path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from hooks.utils import log
+
 # Config path
 CONFIG_DIR = Path.home() / '.claude-task-tracker'
 CONFIG_PATH = CONFIG_DIR / 'config.json'
+
+
+def _log(tag: str, msg: str):
+    """Log to summary.log"""
+    log(tag, msg, log_file='summary.log')
 
 # Default summary prompt
 SUMMARY_SYSTEM_PROMPT = """你是一个任务状态总结助手。请根据提供的上下文生成简洁的任务状态总结。
@@ -98,6 +109,8 @@ class ThirdPartyProvider(SummaryProvider):
             import urllib.error
             import ssl
 
+            _log("API", f"Calling {self.base_url} model={self.model}")
+
             prompt = self._build_prompt(context)
 
             data = json.dumps({
@@ -126,20 +139,42 @@ class ThirdPartyProvider(SummaryProvider):
 
             with urllib.request.urlopen(req, timeout=self.timeout, context=ssl_context) as response:
                 result = json.loads(response.read().decode('utf-8'))
-                content = result['choices'][0]['message']['content']
+                _log("API", f"Response: {json.dumps(result, ensure_ascii=False)[:500]}")
+
+                message = result['choices'][0]['message']
+                # Only use 'content' (final answer), ignore 'reasoning_content' (thinking process)
+                # Thinking models may return empty content if max_tokens is insufficient
+                content = message.get('content', '')
+                _log("API", f"Content: {content[:200] if content else '(empty)'}")
+
+                if not content:
+                    # Empty response (common with thinking models) - fallback to raw
+                    _log("API", "Empty content, fallback to raw")
+                    return self._fallback_to_raw(context, "Empty API response (try non-thinking model)")
+
                 parsed = self._parse_response(content)
+                _log("API", f"Parsed: {json.dumps(parsed, ensure_ascii=False)[:200]}")
+
+                # Check if parse actually succeeded
+                if parsed.get('current_task') == '解析失败':
+                    _log("API", "Parse failed, fallback to raw")
+                    return self._fallback_to_raw(context, f"JSON parse failed: {parsed.get('raw_response', '')[:50]}")
                 parsed['mode'] = 'ai'  # Mark as AI mode
                 return parsed
 
         except urllib.error.URLError as e:
+            _log("API_ERROR", f"URLError: {e.reason}")
             return self._fallback_to_raw(context, f"API error: {e.reason}")
-        except TimeoutError:
+        except (TimeoutError, socket.timeout):
+            _log("API_ERROR", "Timeout")
             return self._fallback_to_raw(context, "API timeout")
         except Exception as e:
+            _log("API_ERROR", f"Exception: {e}")
             return self._fallback_to_raw(context, str(e))
 
     def _fallback_to_raw(self, context: dict, error: str = None) -> dict:
         """Fallback to RAW mode when AI fails"""
+        _log("FALLBACK", f"Switching to raw mode: {error}")
         raw_provider = DisabledProvider({})
         result = raw_provider.generate_summary(context)
         result['fallback_reason'] = error

@@ -173,15 +173,23 @@ def format_notification(
 
     # Get AI summary for body
     if mode_tag == 'ai' and summary:
-        # AI mode: body shows AI-generated summary
-        ai_summary = summary.get('summary') or summary.get('current_task') or ''
+        # AI mode: body shows AI-generated summary with multiple fields
         if pending_question:
             # If there's a pending question, show it
             body = f"AI asks: {pending_question[:70]}"
-        elif ai_summary:
-            body = ai_summary[:80] if len(ai_summary) <= 80 else ai_summary[:77] + '...'
         else:
-            body = format_body(notification_type, original_goal, message, pending_question)
+            # Combine AI summary fields for richer display
+            parts = []
+            if summary.get('current_task'):
+                parts.append(summary['current_task'])
+            if summary.get('progress_summary'):
+                parts.append(f"[{summary['progress_summary']}]")
+            if summary.get('next_step'):
+                parts.append(f"→ {summary['next_step']}")
+
+            body = ' '.join(parts) if parts else ''
+            if len(body) > 100:
+                body = body[:97] + '...'
     else:
         # No AI mode, use default body formatting
         body = format_body(notification_type, original_goal, message, pending_question)
