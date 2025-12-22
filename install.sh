@@ -42,6 +42,7 @@ if [ "$1" = "--hooks-only" ] || [ "$1" = "-p" ]; then
     cp "$TRACKER_SRC/hooks/progress_tracker.py" "$TRACKER_DIR/hooks/"
     cp "$TRACKER_SRC/hooks/notification_tracker.py" "$TRACKER_DIR/hooks/"
     cp "$TRACKER_SRC/hooks/snapshot_hook.py" "$TRACKER_DIR/hooks/"
+    cp "$TRACKER_SRC/hooks/session_cleanup.py" "$TRACKER_DIR/hooks/"
     cp "$TRACKER_SRC/hooks/__init__.py" "$TRACKER_DIR/hooks/" 2>/dev/null || true
     chmod +x "$TRACKER_DIR/hooks/"*.py
 
@@ -351,6 +352,7 @@ else
         cp "$TRACKER_SRC/hooks/progress_tracker.py" "$TRACKER_DIR/hooks/"
         cp "$TRACKER_SRC/hooks/notification_tracker.py" "$TRACKER_DIR/hooks/"
         cp "$TRACKER_SRC/hooks/snapshot_hook.py" "$TRACKER_DIR/hooks/"
+        cp "$TRACKER_SRC/hooks/session_cleanup.py" "$TRACKER_DIR/hooks/"
         cp "$TRACKER_SRC/hooks/__init__.py" "$TRACKER_DIR/hooks/" 2>/dev/null || touch "$TRACKER_DIR/hooks/__init__.py"
 
         # Make hooks executable
@@ -513,7 +515,8 @@ _claude_wrapper() {
     )
 
     # 5. Cleanup on exit (handles ctrl+c and normal exit)
-    python3 "\$_CLAUDE_HOOKS_DIR/task_tracker/hooks/session_cleanup.py" 2>/dev/null &
+    # Suppress job control output completely by disabling job control in subshell
+    (set +m; python3 "\$_CLAUDE_HOOKS_DIR/task_tracker/hooks/session_cleanup.py" >/dev/null 2>&1 &)
 }
 EOF
 

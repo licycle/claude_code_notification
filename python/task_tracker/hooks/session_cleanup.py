@@ -17,47 +17,39 @@ from utils import log
 from services.database import get_connection, update_session_status
 
 
-def cleanup_stale_sessions(max_age_minutes: int = 5):
+def cleanup_current_session():
     """
-    Mark sessions as completed if they haven't been active recently.
+    Mark all active sessions as completed when Claude Code exits.
 
-    This handles the case where Claude Code exits without triggering Stop event
-    (e.g., ctrl+c, terminal close, crash).
-
-    Args:
-        max_age_minutes: Sessions inactive for longer than this are marked completed
+    This is called on exit (ctrl+c, normal exit, etc.) to ensure
+    the status bar shows the correct state.
     """
-    log("CLEANUP", "Starting session cleanup")
-
-    cutoff_time = datetime.now() - timedelta(minutes=max_age_minutes)
-    cutoff_str = cutoff_time.isoformat()
+    log("CLEANUP", "Starting session cleanup on exit")
 
     try:
         with get_connection() as conn:
-            # Find sessions that are not completed and haven't been active recently
+            # Find all sessions that are not completed
             cursor = conn.execute(
-                """SELECT session_id, current_status, last_activity
+                """SELECT session_id, current_status
                    FROM sessions
-                   WHERE current_status NOT IN ('completed', 'rate_limited')
-                   AND last_activity < ?""",
-                (cutoff_str,)
+                   WHERE current_status NOT IN ('completed', 'rate_limited')"""
             )
-            stale_sessions = cursor.fetchall()
+            active_sessions = cursor.fetchall()
 
-            if not stale_sessions:
-                log("CLEANUP", "No stale sessions found")
+            if not active_sessions:
+                log("CLEANUP", "No active sessions to cleanup")
                 return 0
 
-            # Mark each stale session as completed
+            # Mark each active session as completed
             count = 0
-            for row in stale_sessions:
+            for row in active_sessions:
                 session_id = row[0]
                 old_status = row[1]
                 log("CLEANUP", f"Marking session {session_id[:8]}... as completed (was: {old_status})")
                 update_session_status(session_id, 'completed')
                 count += 1
 
-            log("CLEANUP", f"Cleaned up {count} stale sessions")
+            log("CLEANUP", f"Cleaned up {count} active sessions")
             return count
 
     except Exception as e:
@@ -67,9 +59,7 @@ def cleanup_stale_sessions(max_age_minutes: int = 5):
 
 def main():
     """Main entry point"""
-    # Get max age from environment or use default (5 minutes)
-    max_age = int(os.environ.get('CLAUDE_CLEANUP_MAX_AGE', '5'))
-    cleanup_stale_sessions(max_age)
+    cleanup_current_session()
 
 
 if __name__ == '__main__':

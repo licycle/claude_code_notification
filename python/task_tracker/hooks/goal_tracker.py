@@ -42,6 +42,7 @@ def main():
 
     if session is None:
         # New session - record original goal
+        # Status starts as 'working' because user just submitted a prompt
         project_name = get_project_name(cwd)
         log("GOAL", f"Creating new session for project: {project_name}")
 
@@ -57,17 +58,19 @@ def main():
             account_alias=env_info.get('account_alias', 'default'),
             bundle_id=env_info.get('bundle_id'),
             terminal_pid=terminal_pid,
-            window_id=window_id
+            window_id=window_id,
+            initial_status='working'  # User submitted prompt, so working
         )
         log("GOAL", f"Session created with goal: {prompt[:100]}...")
     else:
         # Existing session - record as user input event
-        log("GOAL", f"Existing session, recording user input")
+        current_status = session.get('current_status', 'idle')
+        log("GOAL", f"Existing session (status: {current_status}), recording user input")
 
         # Mark any pending decisions as resolved (user responded)
         resolve_pending_decisions(session_id)
 
-        # Update status to working (user is actively interacting)
+        # Update status to working (user submitted new prompt)
         update_session_status(session_id, 'working')
 
         # Add to timeline

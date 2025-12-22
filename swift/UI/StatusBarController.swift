@@ -354,8 +354,8 @@ extension SessionListViewController: SessionCardViewDelegate {
             object: nil,
             userInfo: [
                 "bundleId": session.bundleId ?? "com.apple.Terminal",
-                "terminalPid": session.terminalPid ?? 0,
-                "windowId": session.windowId ?? 0
+                "terminalPid": session.terminalPid ?? Int32(0),
+                "windowId": session.windowId ?? UInt32(0)
             ]
         )
     }

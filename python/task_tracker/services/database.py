@@ -166,17 +166,23 @@ def create_session(
     account_alias: str = 'default',
     bundle_id: str = None,
     terminal_pid: int = None,
-    window_id: int = None
+    window_id: int = None,
+    initial_status: str = 'working'
 ) -> None:
-    """Create a new session with optional window info for terminal jumping"""
+    """Create a new session with optional window info for terminal jumping
+
+    Args:
+        initial_status: Initial session status. 'working' when user submits prompt,
+                       'idle' if session is created before user input.
+    """
     now = datetime.now().isoformat()
     with get_connection() as conn:
         conn.execute(
             """INSERT OR IGNORE INTO sessions
-               (session_id, project, original_goal, created_at, last_activity,
+               (session_id, project, original_goal, current_status, created_at, last_activity,
                 account_alias, bundle_id, terminal_pid, window_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (session_id, project, original_goal, now, now,
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (session_id, project, original_goal, initial_status, now, now,
              account_alias, bundle_id, terminal_pid, window_id)
         )
         # Record to timeline
