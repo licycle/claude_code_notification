@@ -90,6 +90,7 @@ class ThirdPartyProvider(SummaryProvider):
         self.api_key = config.get('api_key', '')
         self.model = config.get('model', 'gpt-3.5-turbo')
         self.max_tokens = config.get('max_tokens', 500)
+        self.timeout = config.get('timeout', 60)  # Default 60 seconds
 
     def generate_summary(self, context: dict) -> dict:
         try:
@@ -117,15 +118,26 @@ class ThirdPartyProvider(SummaryProvider):
                 }
             )
 
-            with urllib.request.urlopen(req, timeout=30) as response:
+            with urllib.request.urlopen(req, timeout=self.timeout) as response:
                 result = json.loads(response.read().decode('utf-8'))
                 content = result['choices'][0]['message']['content']
-                return self._parse_response(content)
+                parsed = self._parse_response(content)
+                parsed['mode'] = 'ai'  # Mark as AI mode
+                return parsed
 
         except urllib.error.URLError as e:
-            return self._fallback_summary(context, f"API 调用失败: {e.reason}")
+            return self._fallback_to_raw(context, f"API error: {e.reason}")
+        except TimeoutError:
+            return self._fallback_to_raw(context, "API timeout")
         except Exception as e:
-            return self._fallback_summary(context, str(e))
+            return self._fallback_to_raw(context, str(e))
+
+    def _fallback_to_raw(self, context: dict, error: str = None) -> dict:
+        """Fallback to RAW mode when AI fails"""
+        raw_provider = DisabledProvider({})
+        result = raw_provider.generate_summary(context)
+        result['fallback_reason'] = error
+        return result
 
 
 class ClaudeSessionProvider(SummaryProvider):

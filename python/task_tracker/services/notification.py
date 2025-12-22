@@ -5,14 +5,24 @@ Sends rich notifications via ClaudeMonitor Swift app
 
 v2: Uses notification_formatter for structured title/subtitle/body format
 """
+import sys
 import json
 import subprocess
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List
 
-from .notification_formatter import format_notification, get_category_identifier
-from ..hooks.utils import log, get_env_info
+# Add parent paths for imports when running as script
+_current_dir = Path(__file__).parent
+_parent_dir = _current_dir.parent
+if str(_parent_dir) not in sys.path:
+    sys.path.insert(0, str(_parent_dir))
+if str(_current_dir) not in sys.path:
+    sys.path.insert(0, str(_current_dir))
+
+from notification_formatter import format_notification, get_category_identifier
+from hooks.utils import log, get_env_info
+from services.database import get_round_count
 
 # Paths
 STATE_DIR = Path.home() / '.claude-task-tracker' / 'state'
@@ -36,7 +46,8 @@ def send_rich_notification(
     pending_question: str = None,
     pending_options: List[str] = None,
     summary: Dict = None,
-    sound: str = 'Glass'
+    sound: str = 'Glass',
+    round_count: int = 0
 ) -> bool:
     """
     Send rich notification with task details.
@@ -70,7 +81,8 @@ def send_rich_notification(
             'window_id': env_info['window_id']
         },
         'account_alias': env_info['account_alias'],
-        'timestamp': datetime.now().isoformat()
+        'timestamp': datetime.now().isoformat(),
+        'round_count': round_count  # Pass round count in payload
     }
 
     # Write to state file for ClaudeMonitor to read
@@ -84,16 +96,20 @@ def _send_via_swift_app(payload: Dict, env_info: Dict) -> bool:
     """Send notification via ClaudeMonitor Swift app (v2 format)"""
     try:
         # Use v2 formatter for structured notification
-        progress = payload.get('progress', {})
         pending = payload.get('pending_decision')
         summary = payload.get('summary', {}) or {}
 
+        # Use round count from payload (transcript-based), fallback to database
+        session_id = payload.get('session_id', '')
+        round_count = payload.get('round_count', 0)
+        if round_count == 0 and session_id:
+            round_count = get_round_count(session_id)
+
         formatted = format_notification(
             notification_type=payload.get('notification_type', 'idle'),
-            session_id=payload.get('session_id', ''),
+            session_id=session_id,
             account_alias=env_info['account_alias'],
-            completed=progress.get('completed', 0),
-            total=progress.get('total', 0),
+            round_count=round_count,
             current_task=summary.get('current_task') or payload.get('message', ''),
             project_name=payload.get('project_name', ''),
             original_goal=payload.get('original_goal', ''),
@@ -209,29 +225,31 @@ def _write_state_file(session_id: str, payload: Dict):
 # Convenience functions for different notification types
 
 def notify_task_idle(session_id: str, project_name: str, original_goal: str,
-                     completed: int = 0, total: int = 0, summary: Dict = None):
+                     completed: int = 0, total: int = 0, summary: Dict = None,
+                     round_count: int = 0):
     """Notify that a task is idle (waiting for user input)"""
     return send_rich_notification(
         session_id=session_id,
-        title=f"Claude 空闲 - {project_name}",
-        message=original_goal[:100] if original_goal else "等待用户输入",
+        title=f"Idle - {project_name}",
+        message=original_goal[:100] if original_goal else "Waiting for input",
         notification_type='idle',
         project_name=project_name,
         original_goal=original_goal,
         progress_completed=completed,
         progress_total=total,
         summary=summary,
-        sound='Glass'
+        sound='Glass',
+        round_count=round_count
     )
 
 
 def notify_decision_needed(session_id: str, project_name: str, question: str,
                            options: List[str] = None, completed: int = 0, total: int = 0,
-                           summary: Dict = None):
+                           summary: Dict = None, round_count: int = 0):
     """Notify that user decision is needed"""
     return send_rich_notification(
         session_id=session_id,
-        title=f"需要决策 - {project_name}",
+        title=f"Decision Needed - {project_name}",
         message=question[:100],
         notification_type='decision_needed',
         project_name=project_name,
@@ -240,7 +258,8 @@ def notify_decision_needed(session_id: str, project_name: str, question: str,
         progress_completed=completed,
         progress_total=total,
         summary=summary,
-        sound='Sosumi'
+        sound='Sosumi',
+        round_count=round_count
     )
 
 
@@ -248,7 +267,7 @@ def notify_permission_needed(session_id: str, project_name: str, message: str):
     """Notify that permission is needed"""
     return send_rich_notification(
         session_id=session_id,
-        title=f"权限确认 - {project_name}",
+        title=f"Permission - {project_name}",
         message=message[:100],
         notification_type='permission_needed',
         project_name=project_name,
@@ -261,8 +280,8 @@ def notify_task_completed(session_id: str, project_name: str, original_goal: str
     """Notify that a task is completed"""
     return send_rich_notification(
         session_id=session_id,
-        title=f"任务完成 - {project_name}",
-        message=original_goal[:100] if original_goal else "任务已完成",
+        title=f"Completed - {project_name}",
+        message=original_goal[:100] if original_goal else "Task completed",
         notification_type='completed',
         project_name=project_name,
         original_goal=original_goal,
@@ -277,8 +296,8 @@ def notify_progress_update(session_id: str, project_name: str,
     """Notify progress update (optional, for significant milestones)"""
     return send_rich_notification(
         session_id=session_id,
-        title=f"进度更新 - {project_name}",
-        message=current_task or f"已完成 {completed}/{total} 项",
+        title=f"Progress - {project_name}",
+        message=current_task or f"Completed {completed}/{total}",
         notification_type='progress',
         project_name=project_name,
         progress_completed=completed,

@@ -18,9 +18,11 @@ def main():
     log("GOAL", "Hook triggered")
 
     input_data = read_hook_input()
+    log("GOAL", f"Input keys: {list(input_data.keys())}")
 
     session_id = input_data.get('session_id')
-    prompt = input_data.get('prompt', '')
+    # Try both field names (prompt and userPrompt)
+    prompt = input_data.get('prompt') or input_data.get('userPrompt', '')
     cwd = input_data.get('cwd', '')
 
     if not session_id:

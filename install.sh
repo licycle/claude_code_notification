@@ -24,6 +24,105 @@ NC='\033[0m'
 
 cecho() { printf "%b\n" "$1"; }
 
+# ================= Quick Hooks Update Mode =================
+if [ "$1" = "--hooks-only" ] || [ "$1" = "-p" ]; then
+    cecho "${BLUE}=== Quick Hooks Update ===${NC}"
+
+    TRACKER_SRC="$SCRIPT_DIR/python/task_tracker"
+
+    if [ ! -d "$TRACKER_SRC" ]; then
+        cecho "${RED}❌ Error: Task Tracker source not found at $TRACKER_SRC${NC}"
+        exit 1
+    fi
+
+    # Update hook scripts
+    cecho "${YELLOW}Updating hook scripts...${NC}"
+    cp "$TRACKER_SRC/hooks/utils.py" "$TRACKER_DIR/hooks/"
+    cp "$TRACKER_SRC/hooks/goal_tracker.py" "$TRACKER_DIR/hooks/"
+    cp "$TRACKER_SRC/hooks/progress_tracker.py" "$TRACKER_DIR/hooks/"
+    cp "$TRACKER_SRC/hooks/notification_tracker.py" "$TRACKER_DIR/hooks/"
+    cp "$TRACKER_SRC/hooks/snapshot_hook.py" "$TRACKER_DIR/hooks/"
+    cp "$TRACKER_SRC/hooks/__init__.py" "$TRACKER_DIR/hooks/" 2>/dev/null || true
+    chmod +x "$TRACKER_DIR/hooks/"*.py
+
+    # Update service modules
+    cecho "${YELLOW}Updating service modules...${NC}"
+    cp "$TRACKER_SRC/services/database.py" "$TRACKER_DIR/services/"
+    cp "$TRACKER_SRC/services/summary_service.py" "$TRACKER_DIR/services/"
+    cp "$TRACKER_SRC/services/notification.py" "$TRACKER_DIR/services/"
+    cp "$TRACKER_SRC/services/notification_formatter.py" "$TRACKER_DIR/services/"
+    cp "$TRACKER_SRC/services/__init__.py" "$TRACKER_DIR/services/" 2>/dev/null || true
+    cp "$TRACKER_SRC/__init__.py" "$TRACKER_DIR/" 2>/dev/null || true
+
+    cecho "${GREEN}✅ Hooks updated${NC}"
+    cecho "   Source: ${BLUE}$TRACKER_SRC${NC}"
+    cecho "   Target: ${BLUE}$TRACKER_DIR${NC}"
+    exit 0
+fi
+
+# ================= Quick App Rebuild Mode =================
+if [ "$1" = "--app-only" ] || [ "$1" = "-a" ]; then
+    cecho "${BLUE}=== Quick App Rebuild ===${NC}"
+
+    # Kill existing app
+    pkill -f "$APP_NAME" 2>/dev/null || true
+
+    # Remove old binary
+    rm -rf "$INSTALL_DIR"
+    mkdir -p "$INSTALL_DIR/Contents/MacOS"
+    mkdir -p "$INSTALL_DIR/Contents/Resources"
+
+    # Compile Swift
+    SWIFT_DIR="$SCRIPT_DIR/swift"
+    cecho "${YELLOW}Compiling Swift...${NC}"
+    swiftc \
+        "$SWIFT_DIR/Logger.swift" \
+        "$SWIFT_DIR/PermissionManager.swift" \
+        "$SWIFT_DIR/AppDelegate.swift" \
+        "$SWIFT_DIR/SettingsWindow.swift" \
+        "$SWIFT_DIR/Main.swift" \
+        -o "$BINARY_PATH" \
+        -target arm64-apple-macosx12.0
+    chmod +x "$BINARY_PATH"
+
+    # Copy icon
+    ASSETS_DIR="$SCRIPT_DIR/assets"
+    [ -f "$ASSETS_DIR/app_icon.png" ] && cp "$ASSETS_DIR/app_icon.png" "$INSTALL_DIR/Contents/Resources/"
+    [ -f "$ASSETS_DIR/AppIcon.icns" ] && cp "$ASSETS_DIR/AppIcon.icns" "$INSTALL_DIR/Contents/Resources/"
+
+    # Create Info.plist
+    cat << EOF > "$INSTALL_DIR/Contents/Info.plist"
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleIdentifier</key>
+    <string>com.custom.claude.monitor</string>
+    <key>CFBundleName</key>
+    <string>$APP_NAME</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>LSUIElement</key>
+    <true/>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>ClaudeMonitor needs automation access to restore minimized windows.</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon.icns</string>
+</dict>
+</plist>
+EOF
+
+    # Sign and register
+    codesign --force --deep --sign - "$INSTALL_DIR"
+    open "$INSTALL_DIR"
+    sleep 0.3
+    pkill -f "$APP_NAME" 2>/dev/null || true
+
+    cecho "${GREEN}✅ App rebuilt and installed${NC}"
+    cecho "   Test: ${GREEN}$BINARY_PATH gui${NC}"
+    exit 0
+fi
+
 # Function to generate hooks configuration in settings.json
 # Unified Task Tracker architecture
 generate_hooks_config() {
@@ -241,8 +340,6 @@ else
         # Create directories
         mkdir -p "$TRACKER_DIR/hooks"
         mkdir -p "$TRACKER_DIR/services"
-        mkdir -p "$TRACKER_DIR/logs"
-        mkdir -p "$TRACKER_DIR/state"
 
         # Copy hook scripts
         cp "$TRACKER_SRC/hooks/utils.py" "$TRACKER_DIR/hooks/"
@@ -731,7 +828,7 @@ cecho "${YELLOW}📝 Next Steps:${NC}"
 cecho "   1. Run: ${GREEN}source $RC_FILE${NC}"
 cecho "   2. Test: ${GREEN}$first_alias${NC} (or any configured alias)"
 cecho "   3. Settings: ${GREEN}$BINARY_PATH gui${NC}"
-cecho "   4. Logs: ${BLUE}~/.claude-hooks/task_tracker/logs/${NC}"
+cecho "   4. Logs: ${BLUE}~/.claude-task-tracker/logs/${NC}"
 cecho "   5. Config: ${BLUE}~/.claude-task-tracker/config.json${NC}"
 echo ""
 

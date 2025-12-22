@@ -162,7 +162,7 @@ swiftc \
 ~/Applications/ClaudeMonitor.app/Contents/MacOS/ClaudeMonitor gui
 
 # 查看日志
-tail -f ~/.claude-hooks/task_tracker/logs/task-tracker.log
+tail -f ~/.claude-task-tracker/logs/hooks.log
 ```
 
 ## 数据流

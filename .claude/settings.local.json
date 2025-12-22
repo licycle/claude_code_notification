@@ -33,7 +33,20 @@
       "Bash(./ClaudeMonitor:*)",
       "Bash(__NEW_LINE__ echo \"\")",
       "Bash(sort:*)",
-      "Bash(md5:*)"
+      "Bash(md5:*)",
+      "Bash(python3:*)",
+      "mcp__deepwiki__read_wiki_structure",
+      "Bash(/Users/wukangda/Desktop/claude_notification/install.sh:*)",
+      "Bash(__NEW_LINE__ sqlite3 ~/.claude-task-tracker/tasks.db \"\n.mode column\n.headers on\n\n-- 最近的 sessions\nSELECT session_id, substr\\(original_goal, 1, 40\\) as goal, current_status, last_activity \nFROM sessions \nORDER BY last_activity DESC \nLIMIT 5;\n\")",
+      "Bash(TRANSCRIPT=/Users/wukangda/.claude/projects/-Users-wukangda-Desktop-claude-notification/97f39cae-8b7b-4f98-8f27-3db46884ddb8.jsonl grep:*)",
+      "Bash(TRANSCRIPT=\"/Users/wukangda/.claude/projects/-Users-wukangda-Desktop-claude-notification/97f39cae-8b7b-4f98-8f27-3db46884ddb8.jsonl\" echo \"=== 最后 5 条 user 类型事件 ===\" grep '\"\"\"\"type\"\"\"\":\"\"\"\"user\"\"\"\"' \"$TRANSCRIPT\")",
+      "Bash(while read line)",
+      "Bash(do echo \"$line\")",
+      "Bash(TRANSCRIPT=\"/Users/wukangda/.claude/projects/-Users-wukangda-Desktop-claude-notification/97f39cae-8b7b-4f98-8f27-3db46884ddb8.jsonl\" echo \"=== 最后 3 条 user 类型事件的 content 类型 ===\" grep '\"\"\"\"type\"\"\"\":\"\"\"\"user\"\"\"\"' \"$TRANSCRIPT\")",
+      "Bash(TRANSCRIPT=\"/Users/wukangda/.claude/projects/-Users-wukangda-Desktop-claude-notification/97f39cae-8b7b-4f98-8f27-3db46884ddb8.jsonl\" echo \"=== 搜索包含 ''''The user sent'''' 的内容 ===\" grep -o '\"\"\"\"The user sent[^\"\"\"\"]*\"\"\"\"' \"$TRANSCRIPT\")",
+      "Bash(TRANSCRIPT=\"/Users/wukangda/.claude/projects/-Users-wukangda-Desktop-claude-notification/97f39cae-8b7b-4f98-8f27-3db46884ddb8.jsonl\" echo \"=== 搜索 ''''user sent the following message'''' ===\" grep -i \"user sent the following message\" \"$TRANSCRIPT\")",
+      "Bash(TRANSCRIPT=\"/Users/wukangda/.claude/projects/-Users-wukangda-Desktop-claude-notification/97f39cae-8b7b-4f98-8f27-3db46884ddb8.jsonl\" echo \"=== 直接搜索 git 查看 ===\" grep -c \"git\" \"$TRANSCRIPT\" echo \"\" echo \"=== 搜索 deepwiki ===\" grep \"deepwiki\" \"$TRANSCRIPT\")",
+      "Bash(TRANSCRIPT=\"/Users/wukangda/.claude/projects/-Users-wukangda-Desktop-claude-notification/97f39cae-8b7b-4f98-8f27-3db46884ddb8.jsonl\" echo \"=== 所有包含 ''''user sent'''' 的内容 ===\" grep -o \"user sent the following message[^P]*Please\" \"$TRANSCRIPT\")"
     ]
   }
 }

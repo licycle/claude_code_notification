@@ -20,15 +20,15 @@ STATUS_EMOJI = {
     'progress': '\U0001f4c8',             # Chart increasing
 }
 
-# Status display text mapping (shorter for title)
+# Status display text mapping (English)
 STATUS_TEXT = {
-    'decision_needed': '决策',
-    'idle': '空闲',
-    'permission_needed': '权限',
-    'completed': '完成',
-    'working': '运行',
-    'rate_limited': '限流',
-    'progress': '进度',
+    'decision_needed': 'Decision Needed',
+    'idle': 'Idle',
+    'permission_needed': 'Permission',
+    'completed': 'Completed',
+    'working': 'Working',
+    'rate_limited': 'Rate Limited',
+    'progress': 'Progress',
 }
 
 
@@ -36,83 +36,89 @@ def format_title(
     notification_type: str,
     account_alias: str = None,
     session_id: str = None,
-    completed: int = 0,
-    total: int = 0
+    round_count: int = 0,
+    **kwargs  # Accept extra args for compatibility
 ) -> str:
     """
     Format notification title
-    Format: {account} {session[:4]} {emoji}{status} {completed}/{total}
-    Example: personal abc1 空闲 3/5
+    New format: {emoji} {status} [{account}][{session_id}] R{round}
+    Example: ⚠️ Decision Needed [personal][5f95] R7
     """
-    parts = []
-
-    # Account alias
-    if account_alias and account_alias != 'default':
-        parts.append(account_alias[:8])
-    else:
-        parts.append('default')
-
-    # Session ID (first 4 chars)
-    if session_id:
-        parts.append(session_id[:4])
-
-    # Status with emoji
+    # emoji + status text
     emoji = STATUS_EMOJI.get(notification_type, '')
-    status_text = STATUS_TEXT.get(notification_type, '通知')
-    parts.append(f"{emoji}{status_text}")
+    status_text = STATUS_TEXT.get(notification_type, 'Notification')
 
-    # Progress (round count)
-    if total > 0:
-        parts.append(f"{completed}/{total}")
+    # account tag
+    account_part = f"[{account_alias[:8]}]" if account_alias and account_alias != 'default' else ''
 
-    return ' '.join(parts)
+    # session_id tag
+    session_part = f"[{session_id[:4]}]" if session_id else ''
+
+    # round count
+    round_part = f" R{round_count}" if round_count > 0 else ''
+
+    return f"{emoji} {status_text} {account_part}{session_part}{round_part}".strip()
 
 
 def format_subtitle(
     current_task: str = None,
-    project_name: str = None
+    project_name: str = None,
+    round_count: int = 0,
+    mode: str = None,  # 'ai' or 'raw'
+    **kwargs  # Accept extra args for compatibility
 ) -> str:
     """
-    Format notification subtitle - current task summary (one sentence)
+    Format notification subtitle - mode tag + task summary
+    New format: [{mode}] {task_summary}
+    Example: [AI] Refactoring auth module
     """
-    if current_task:
-        # Truncate to ~40 chars for subtitle
-        if len(current_task) > 40:
-            return current_task[:37] + '...'
-        return current_task
+    # mode tag
+    mode_tag = f"[{mode.upper()}] " if mode else ''
 
-    # Fallback to project name
-    if project_name:
-        return f"项目: {project_name[:30]}"
+    # task summary (shorter to accommodate mode tag)
+    max_len = 30 if mode else 35
+    task_summary = current_task or project_name or ''
+    if len(task_summary) > max_len:
+        task_summary = task_summary[:max_len - 3] + '...'
 
-    return ""
+    return f"{mode_tag}{task_summary}"
 
 
 def format_body(
+    notification_type: str = None,
     original_goal: str = None,
     message: str = None,
     pending_question: str = None
 ) -> str:
     """
     Format notification body - actual requirements and task content
-    Shows: original goal or pending question
+    Shows different content based on notification type
     """
-    # Pending question takes priority (actionable)
+    # Task completed
+    if notification_type == 'completed':
+        return "All steps completed"
+
+    # Permission needed
+    if notification_type == 'permission_needed' and message:
+        content = message[:70]
+        return f"Request: {content}"
+
+    # Pending question takes priority
     if pending_question:
-        if len(pending_question) > 100:
-            return pending_question[:97] + '...'
+        if len(pending_question) > 80:
+            return pending_question[:77] + '...'
         return pending_question
 
-    # Original goal (actual requirement)
+    # Original goal
     if original_goal:
-        if len(original_goal) > 100:
-            return original_goal[:97] + '...'
+        if len(original_goal) > 80:
+            return original_goal[:77] + '...'
         return original_goal
 
     # Fallback to message
     if message:
-        if len(message) > 100:
-            return message[:97] + '...'
+        if len(message) > 80:
+            return message[:77] + '...'
         return message
 
     return ""
@@ -122,8 +128,7 @@ def format_notification(
     notification_type: str,
     session_id: str = None,
     account_alias: str = None,
-    completed: int = 0,
-    total: int = 0,
+    round_count: int = 0,
     current_task: str = None,
     project_name: str = None,
     original_goal: str = None,
@@ -135,15 +140,15 @@ def format_notification(
     """
     Format complete notification with title, subtitle, and body.
 
-    Normal mode (AI summary enabled):
-        Title:    {account} {session[:4]} {status} {progress}
-        Subtitle: {current_task_summary}
-        Body:     {original_goal/pending_question}
+    New format:
+        Title:    {emoji} {status} [{account}][{session_id}] R{round}
+        Subtitle: {task_summary}
+        Body:     {key_info/question/next_step}
 
     Raw mode (AI summary disabled):
-        Title:    {account} {session[:4]} {status} {progress}
-        Subtitle: User: {user_prompt_preview}
-        Body:     [AI Request: {pending_question}] or {original_goal}
+        Title:    {emoji} {status} [{account}][{session_id}] R{round}
+        Subtitle: [RAW] {user_prompt_preview}
+        Body:     {pending_question} or {current_task}
 
     Returns:
         Dict with 'title', 'subtitle', 'body' keys
@@ -154,24 +159,29 @@ def format_notification(
             notification_type=notification_type,
             session_id=session_id,
             account_alias=account_alias,
-            completed=completed,
-            total=total,
+            round_count=round_count,
             summary=summary,
             project_name=project_name,
             original_goal=original_goal
         )
 
-    # Normal mode with AI summary
+    # Determine mode tag: only show [AI] if we actually have AI-generated content
+    # If summary exists and has AI-generated content, show [AI]
+    # Otherwise, no mode tag (None)
+    mode_tag = None
+    if summary and summary.get('mode') == 'ai' and summary.get('ai_summary'):
+        mode_tag = 'ai'
+
+    # Normal mode
     return {
         'title': format_title(
             notification_type,
             account_alias,
             session_id,
-            completed,
-            total
+            round_count
         ),
-        'subtitle': format_subtitle(current_task, project_name),
-        'body': format_body(original_goal, message, pending_question)
+        'subtitle': format_subtitle(current_task, project_name, round_count, mode=mode_tag),
+        'body': format_body(notification_type, original_goal, message, pending_question)
     }
 
 
@@ -179,8 +189,7 @@ def format_raw_notification(
     notification_type: str,
     session_id: str = None,
     account_alias: str = None,
-    completed: int = 0,
-    total: int = 0,
+    round_count: int = 0,
     summary: Dict = None,
     project_name: str = None,
     original_goal: str = None
@@ -190,43 +199,46 @@ def format_raw_notification(
 
     Shows user's actual prompt and AI's pending question directly.
 
-    Title:    {account} {session[:4]} {status} {progress}
-    Subtitle: {user_prompt_preview} (truncated user input)
+    Title:    {emoji} {status} [{account}][{session_id}] R{round}
+    Subtitle: [RAW] {user_prompt_preview}
     Body:     {pending_question} or {current_task}
     """
     summary = summary or {}
 
-    # Title stays the same
+    # Title with round count
     title = format_title(
         notification_type,
         account_alias,
         session_id,
-        completed,
-        total
+        round_count
     )
 
-    # Subtitle: Show user prompt preview
+    # Subtitle: Show user prompt preview + RAW mode tag
     user_prompt = summary.get('user_prompt', '')
     if user_prompt:
         # Truncate and clean up for subtitle
         user_prompt = user_prompt.replace('\n', ' ').strip()
-        if len(user_prompt) > 50:
-            subtitle = user_prompt[:47] + '...'
+        if len(user_prompt) > 25:
+            task_summary = user_prompt[:22] + '...'
         else:
-            subtitle = user_prompt
+            task_summary = user_prompt
     else:
-        subtitle = project_name or ''
+        task_summary = project_name or ''
+        if len(task_summary) > 25:
+            task_summary = task_summary[:22] + '...'
+
+    subtitle = f"[RAW] {task_summary}"
 
     # Body: Show pending question (AI needs help) or current task
     pending_q = summary.get('pending_question', '')
     if pending_q:
-        body = f"AI需要协助: {pending_q}"
+        body = f"AI needs input: {pending_q[:60]}"
     else:
         current_task = summary.get('current_task', '')
         if current_task:
-            body = current_task
+            body = current_task[:80]
         else:
-            body = original_goal[:100] if original_goal else ''
+            body = original_goal[:80] if original_goal else ''
 
     return {
         'title': title,

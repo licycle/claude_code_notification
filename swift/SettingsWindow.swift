@@ -112,7 +112,10 @@ class SettingsWindowController: NSWindowController {
     // Summary AI settings controls
     private var summaryEnabledCheckbox: NSButton!
     private var summaryBaseURLField: NSTextField!
-    private var summaryAPIKeyField: NSSecureTextField!
+    private var summaryAPIKeyField: NSTextField!
+    private var summaryAPIKeyToggleButton: NSButton!
+    private var isAPIKeyVisible: Bool = false
+    private var actualAPIKey: String = ""
     private var summaryModelField: NSTextField!
     private var summaryConfigContainer: NSView!
 
@@ -224,6 +227,8 @@ class SettingsWindowController: NSWindowController {
 
         summaryBaseURLField = NSTextField(frame: NSRect(x: 90, y: configY - 2, width: 340, height: 24))
         summaryBaseURLField.placeholderString = "https://api.openai.com/v1"
+        summaryBaseURLField.isEditable = true
+        summaryBaseURLField.isSelectable = true
         summaryBaseURLField.target = self
         summaryBaseURLField.action = #selector(summaryConfigChanged)
         summaryConfigContainer.addSubview(summaryBaseURLField)
@@ -235,11 +240,19 @@ class SettingsWindowController: NSWindowController {
         apiKeyLabel.frame = NSRect(x: 0, y: configY, width: 80, height: 20)
         summaryConfigContainer.addSubview(apiKeyLabel)
 
-        summaryAPIKeyField = NSSecureTextField(frame: NSRect(x: 90, y: configY - 2, width: 340, height: 24))
+        summaryAPIKeyField = NSTextField(frame: NSRect(x: 90, y: configY - 2, width: 280, height: 24))
         summaryAPIKeyField.placeholderString = "sk-..."
+        summaryAPIKeyField.isEditable = true
+        summaryAPIKeyField.isSelectable = true
         summaryAPIKeyField.target = self
-        summaryAPIKeyField.action = #selector(summaryConfigChanged)
+        summaryAPIKeyField.action = #selector(apiKeyFieldChanged)
         summaryConfigContainer.addSubview(summaryAPIKeyField)
+
+        // Show/Hide toggle button
+        summaryAPIKeyToggleButton = NSButton(title: "Show", target: self, action: #selector(toggleAPIKeyVisibility))
+        summaryAPIKeyToggleButton.bezelStyle = .rounded
+        summaryAPIKeyToggleButton.frame = NSRect(x: 375, y: configY - 4, width: 55, height: 24)
+        summaryConfigContainer.addSubview(summaryAPIKeyToggleButton)
         configY -= 35
 
         // Model
@@ -250,6 +263,8 @@ class SettingsWindowController: NSWindowController {
 
         summaryModelField = NSTextField(frame: NSRect(x: 90, y: configY - 2, width: 200, height: 24))
         summaryModelField.placeholderString = "gpt-3.5-turbo"
+        summaryModelField.isEditable = true
+        summaryModelField.isSelectable = true
         summaryModelField.target = self
         summaryModelField.action = #selector(summaryConfigChanged)
         summaryConfigContainer.addSubview(summaryModelField)
@@ -278,9 +293,30 @@ class SettingsWindowController: NSWindowController {
         let settings = SettingsManager.shared
         summaryEnabledCheckbox.state = settings.summaryEnabled ? .on : .off
         summaryBaseURLField.stringValue = settings.summaryBaseURL
-        summaryAPIKeyField.stringValue = settings.summaryAPIKey
+        actualAPIKey = settings.summaryAPIKey
+        updateAPIKeyDisplay()
         summaryModelField.stringValue = settings.summaryModel
         updateSummaryConfigVisibility()
+    }
+
+    private func updateAPIKeyDisplay() {
+        if isAPIKeyVisible {
+            summaryAPIKeyField.stringValue = actualAPIKey
+            summaryAPIKeyToggleButton.title = "Hide"
+        } else {
+            // Show masked version
+            if actualAPIKey.isEmpty {
+                summaryAPIKeyField.stringValue = ""
+            } else {
+                summaryAPIKeyField.stringValue = String(repeating: "•", count: min(actualAPIKey.count, 32))
+            }
+            summaryAPIKeyToggleButton.title = "Show"
+        }
+    }
+
+    private func maskAPIKey(_ key: String) -> String {
+        guard !key.isEmpty else { return "" }
+        return String(repeating: "•", count: min(key.count, 32))
     }
 
     private func updateSummaryConfigVisibility() {
@@ -298,8 +334,25 @@ class SettingsWindowController: NSWindowController {
     @objc func summaryConfigChanged() {
         let settings = SettingsManager.shared
         settings.summaryBaseURL = summaryBaseURLField.stringValue
-        settings.summaryAPIKey = summaryAPIKeyField.stringValue
         settings.summaryModel = summaryModelField.stringValue.isEmpty ? "gpt-3.5-turbo" : summaryModelField.stringValue
+    }
+
+    @objc func toggleAPIKeyVisibility() {
+        isAPIKeyVisible.toggle()
+        updateAPIKeyDisplay()
+    }
+
+    @objc func apiKeyFieldChanged() {
+        let fieldValue = summaryAPIKeyField.stringValue
+        // Only update if visible (user is editing) or if it's a paste operation (contains non-bullet chars)
+        if isAPIKeyVisible || !fieldValue.contains("•") {
+            actualAPIKey = fieldValue
+            SettingsManager.shared.summaryAPIKey = actualAPIKey
+            if !isAPIKeyVisible {
+                // User pasted while hidden, update display
+                updateAPIKeyDisplay()
+            }
+        }
     }
 
     @objc func refreshStatus() {

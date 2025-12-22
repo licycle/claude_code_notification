@@ -123,31 +123,141 @@ def parse_transcript(transcript_path: str) -> List[Dict]:
     return events
 
 
+def _extract_user_message_from_system_reminder(text: str) -> Optional[str]:
+    """Extract user message from system-reminder or tool_result content.
+
+    Looks for patterns:
+    1. <system-reminder>The user sent the following message: {message}</system-reminder>
+    2. user sent the following message:\n{message}\n\nPlease address...
+
+    Skips code file content (contains line number prefix like '→').
+    """
+    # Skip if this looks like code file content (has line number prefix)
+    if '→' in text[:300]:
+        return None
+
+    # Pattern 1: With system-reminder tag
+    pattern1 = r'<system-reminder>\s*The user sent the following message:\s*\n([^\n<]+)'
+    match = re.search(pattern1, text, re.IGNORECASE)
+    if match:
+        return match.group(1).strip()
+
+    # Pattern 2: Direct format (no tag)
+    pattern2 = r'user sent the following message:\s*\n([^\n]+)\n'
+    match = re.search(pattern2, text, re.IGNORECASE)
+    if match:
+        return match.group(1).strip()
+
+    return None
+
+
+def extract_all_user_messages(events: List[Dict]) -> List[str]:
+    """Extract all user messages from transcript events.
+
+    Sources:
+    1. Direct user input (type=user, content=string)
+    2. queue-operation events (operation=enqueue, content=string)
+    3. system-reminder in tool_result
+
+    Returns list of user messages in chronological order.
+    """
+    messages = []
+
+    for event in events:
+        event_type = event.get('type', '')
+
+        # Source 1: Direct user input
+        if event_type == 'user':
+            content = event.get('message', {}).get('content', '')
+            if isinstance(content, str) and content.strip():
+                # Clean system reminders
+                clean = re.sub(r'<system-reminder>[\s\S]*?</system-reminder>', '', content).strip()
+                if clean:
+                    messages.append(clean)
+
+        # Source 2: queue-operation (enqueue)
+        elif event_type == 'queue-operation' and event.get('operation') == 'enqueue':
+            content = event.get('content', '')
+            if content and isinstance(content, str):
+                messages.append(content.strip())
+
+    # Deduplicate while preserving order
+    seen = set()
+    unique_messages = []
+    for msg in messages:
+        # Use first 50 chars as key to handle slight variations
+        key = msg[:50]
+        if key not in seen:
+            seen.add(key)
+            unique_messages.append(msg)
+
+    return unique_messages
+
+
+def get_user_round_count(events: List[Dict]) -> int:
+    """Get total user input round count from transcript events."""
+    return len(extract_all_user_messages(events))
+
+
 def extract_last_message(events: List[Dict], msg_type: str, strip_system_reminders: bool = True) -> str:
-    """Extract last message of given type from events"""
+    """Extract last message of given type from events.
+
+    For 'user' type, skips tool_result events and finds actual user input.
+    Also extracts user messages from system-reminder tags in tool_result.
+    """
+    # First pass: look for user messages in system-reminders (tool_result content)
+    if msg_type == 'user':
+        for event in reversed(events):
+            if event.get('type') == 'user':
+                content = event.get('message', {}).get('content', '')
+                if isinstance(content, list):
+                    for item in content:
+                        if item.get('type') == 'tool_result':
+                            result_content = item.get('content', '')
+                            if isinstance(result_content, str):
+                                user_msg = _extract_user_message_from_system_reminder(result_content)
+                                if user_msg:
+                                    return user_msg
+
+    # Second pass: look for direct user input (string content)
     for event in reversed(events):
         if event.get('type') == msg_type:
             content = event.get('message', {}).get('content', '')
 
-            # Handle string content
+            # Handle string content (real user input)
             if isinstance(content, str):
-                text = content
-            # Handle array content (text blocks)
+                text = content.strip()
+                if text:  # Only return non-empty strings
+                    # Strip system reminders if requested
+                    if strip_system_reminders:
+                        text = re.sub(r'<system-reminder>[\s\S]*?</system-reminder>', '', text)
+                        text = re.sub(r'\n{3,}', '\n\n', text).strip()
+                    return text
+                continue  # Empty string, keep searching
+
+            # Handle array content (text blocks or tool_result)
             elif isinstance(content, list):
+                # Check if this is a tool_result event (skip it for user messages)
+                has_tool_result = any(item.get('type') == 'tool_result' for item in content)
+                if msg_type == 'user' and has_tool_result:
+                    continue  # Skip tool_result, keep searching for real user input
+
+                # Extract text from text blocks
                 text = '\n'.join([
                     item.get('text', '')
                     for item in content
                     if item.get('type') == 'text'
                 ])
+
+                if text.strip():  # Only return non-empty text
+                    # Strip system reminders if requested
+                    if strip_system_reminders:
+                        text = re.sub(r'<system-reminder>[\s\S]*?</system-reminder>', '', text)
+                        text = re.sub(r'\n{3,}', '\n\n', text).strip()
+                    return text
+                continue  # Empty text, keep searching
             else:
                 continue
-
-            # Strip system reminders if requested
-            if strip_system_reminders and msg_type == 'assistant':
-                text = re.sub(r'<system-reminder>[\s\S]*?</system-reminder>', '', text)
-                text = re.sub(r'\n{3,}', '\n\n', text).strip()
-
-            return text
 
     return ''
 

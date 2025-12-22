@@ -6,8 +6,8 @@ Also handles rate limit detection (merged from stop_hook.py)
 """
 import sys
 import os
+import json
 from pathlib import Path
-from collections import deque
 
 # Add parent paths for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from utils import (
     read_hook_input, write_hook_output, log, get_project_name,
     parse_transcript, extract_last_message, extract_todos_from_transcript,
-    detect_pending_question
+    detect_pending_question, get_user_round_count, extract_all_user_messages
 )
 from services.database import (
     get_session, update_session_status, save_snapshot,
@@ -34,31 +34,68 @@ RATE_LIMIT_KEYWORDS = [
 ]
 
 
-def get_last_n_lines(filepath, n=3):
-    """Read last n lines from file efficiently"""
+def get_last_n_events(transcript_path, n=5):
+    """Read last n JSONL events from transcript file"""
     try:
-        with open(os.path.expanduser(filepath), 'rb') as f:
-            return deque(f, n)
+        events = []
+        with open(os.path.expanduser(transcript_path), 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    try:
+                        events.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        continue
+        return events[-n:] if len(events) >= n else events
     except Exception as e:
-        log("SNAPSHOT", f"Failed to read file: {e}")
+        log("SNAPSHOT", f"Failed to read transcript: {e}")
         return []
 
 
 def detect_rate_limit(transcript_path):
-    """Check last 3 records in transcript for rate limit errors"""
+    """Check last events in transcript for rate limit errors.
+
+    Only detects rate limits from:
+    - Error type events
+    - System messages indicating rate limit
+    - Tool errors with rate limit messages
+
+    Does NOT trigger on user/assistant messages discussing rate limits.
+    """
     if not transcript_path:
         return False, None
 
-    last_lines = get_last_n_lines(transcript_path, 3)
+    events = get_last_n_events(transcript_path, 5)
 
-    for line in last_lines:
-        try:
-            content = line.decode('utf-8', errors='ignore').lower()
+    for event in events:
+        event_type = event.get('type', '')
+
+        # Only check error-related events, not user/assistant messages
+        if event_type in ('user', 'assistant'):
+            continue
+
+        # Check for error events
+        if event_type == 'error':
+            error_msg = str(event.get('error', '')).lower()
             for keyword in RATE_LIMIT_KEYWORDS:
-                if keyword in content:
+                if keyword in error_msg:
                     return True, keyword
-        except:
-            pass
+
+        # Check tool errors
+        if event_type == 'tool_result':
+            is_error = event.get('is_error', False)
+            if is_error:
+                result = str(event.get('result', '')).lower()
+                for keyword in RATE_LIMIT_KEYWORDS:
+                    if keyword in result:
+                        return True, keyword
+
+        # Check system events
+        if event_type == 'system':
+            msg = str(event.get('message', '')).lower()
+            for keyword in RATE_LIMIT_KEYWORDS:
+                if keyword in msg:
+                    return True, keyword
 
     return False, None
 
@@ -112,6 +149,15 @@ def main():
     # Extract messages
     last_user = extract_last_message(events, 'user')
     last_assistant = extract_last_message(events, 'assistant', strip_system_reminders=True)
+    log("SNAPSHOT", f"Extracted last_user: {last_user[:80] if last_user else '(empty)'}...")
+
+    # Calculate round count from transcript (includes queue-operation messages)
+    round_count = get_user_round_count(events)
+    log("SNAPSHOT", f"Round count from transcript: {round_count}")
+
+    # Get all user messages for summary
+    all_user_messages = extract_all_user_messages(events)
+    latest_user_message = all_user_messages[-1] if all_user_messages else last_user
 
     # Extract todos from transcript (may be more up-to-date than DB)
     todos = extract_todos_from_transcript(events)
@@ -147,7 +193,7 @@ def main():
 
     context = {
         'original_goal': original_goal,
-        'last_user_message': last_user,
+        'last_user_message': latest_user_message,  # Use latest from all sources
         'last_assistant_message': last_assistant,
         'todos': todos,
         'completed': completed,
@@ -184,7 +230,8 @@ def main():
             options=pending_options,
             completed=completed,
             total=total,
-            summary=summary
+            summary=summary,
+            round_count=round_count  # Pass transcript-based round count
         )
     else:
         # Normal idle notification with summary
@@ -194,7 +241,8 @@ def main():
             original_goal=summary.get('current_task', original_goal),
             completed=completed,
             total=total,
-            summary=summary
+            summary=summary,
+            round_count=round_count  # Pass transcript-based round count
         )
 
     log("SNAPSHOT", "Snapshot complete")

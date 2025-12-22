@@ -339,6 +339,39 @@ def mark_session_completed(session_id: str) -> None:
     update_session_status(session_id, 'completed')
 
 
+def get_round_count(session_id: str) -> int:
+    """
+    获取用户输入轮数（goal_set + user_input 事件数）
+    轮数 = 1 (goal_set) + count(user_input events)
+    """
+    with get_connection() as conn:
+        cursor = conn.execute(
+            """SELECT COUNT(*) FROM timeline
+               WHERE session_id = ?
+               AND event_type IN ('goal_set', 'user_input')""",
+            (session_id,)
+        )
+        return cursor.fetchone()[0]
+
+
+def get_latest_user_input(session_id: str) -> Optional[str]:
+    """
+    获取最新的用户输入内容
+    优先返回最新的 user_input 事件，如果没有则返回 goal_set 事件
+    """
+    with get_connection() as conn:
+        cursor = conn.execute(
+            """SELECT content FROM timeline
+               WHERE session_id = ?
+               AND event_type IN ('goal_set', 'user_input')
+               ORDER BY timestamp DESC
+               LIMIT 1""",
+            (session_id,)
+        )
+        row = cursor.fetchone()
+        return row[0] if row else None
+
+
 def cleanup_old_sessions(days: int = 7) -> int:
     """Clean up sessions older than specified days"""
     with get_connection() as conn:

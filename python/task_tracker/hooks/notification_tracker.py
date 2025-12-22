@@ -11,10 +11,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent))
 
 from utils import read_hook_input, write_hook_output, log, get_project_name
-from services.database import get_session, update_session_status, get_progress
+from services.database import get_session, update_session_status, get_progress, get_latest_user_input
 from services.notification import (
     notify_task_idle, notify_decision_needed, notify_permission_needed
 )
+from services.summary_service import get_summary_service
 
 
 def main():
@@ -89,13 +90,28 @@ def handle_idle(session_id: str, project_name: str, original_goal: str,
     # Update session status
     update_session_status(session_id, 'idle')
 
+    # Get latest user input from timeline
+    latest_user_input = get_latest_user_input(session_id)
+    log("NOTIF", f"Latest user input: {latest_user_input[:50] if latest_user_input else 'None'}...")
+
+    # Generate summary for consistent mode display
+    summary_service = get_summary_service()
+    context = {
+        'original_goal': original_goal,
+        'completed': completed,
+        'total': total,
+        'last_user_message': latest_user_input or original_goal  # Use latest input for RAW mode
+    }
+    summary = summary_service.summarize(context)
+
     # Send notification
     notify_task_idle(
         session_id=session_id,
         project_name=project_name,
         original_goal=original_goal,
         completed=completed,
-        total=total
+        total=total,
+        summary=summary
     )
 
 
@@ -107,13 +123,23 @@ def handle_elicitation(session_id: str, project_name: str, message: str,
     # Update session status
     update_session_status(session_id, 'waiting_for_user')
 
+    # Generate summary for consistent mode display
+    summary_service = get_summary_service()
+    context = {
+        'pending_question': message,
+        'completed': completed,
+        'total': total
+    }
+    summary = summary_service.summarize(context)
+
     # Send notification
     notify_decision_needed(
         session_id=session_id,
         project_name=project_name,
         question=message or "请回答问题",
         completed=completed,
-        total=total
+        total=total,
+        summary=summary
     )
 
 

@@ -4,6 +4,7 @@
 APP_NAME="ClaudeMonitor"
 INSTALL_DIR="$HOME/Applications/$APP_NAME.app"
 BASE_DIR="$HOME/.claude-hooks"
+DATA_DIR="$HOME/.claude-task-tracker"
 RC_FILE="$HOME/.zshrc"
 [ -f "$HOME/.bashrc" ] && RC_FILE="$HOME/.bashrc"
 
@@ -35,6 +36,19 @@ if [ -d "$BASE_DIR" ]; then
     echo "Removed Config: $BASE_DIR"
 fi
 
+if [ -d "$DATA_DIR" ]; then
+    cecho "${YELLOW}Found Task Tracker data: $DATA_DIR${NC}"
+    printf "Remove Task Tracker data (database, config)? [Y/n]: "
+    read remove_data
+    remove_data=${remove_data:-Y}
+    if [ "$remove_data" = "Y" ] || [ "$remove_data" = "y" ]; then
+        rm -rf "$DATA_DIR"
+        echo "Removed Data: $DATA_DIR"
+    else
+        echo "Skipped: $DATA_DIR"
+    fi
+fi
+
 # 3. Remove hooks configuration from settings.json (NEW) and legacy hooks.json
 echo "Searching for hooks configurations in Claude directories..."
 REMOVED_HOOKS=0
@@ -48,8 +62,8 @@ remove_hooks_from_settings() {
         return 1
     fi
 
-    # Check if settings.json contains our notification_hook.py reference
-    if grep -q "notification_hook.py" "$settings_file" 2>/dev/null; then
+    # Check if settings.json contains our hook references (both old and new patterns)
+    if grep -q "notification_hook.py\|goal_tracker.py\|progress_tracker.py\|notification_tracker.py\|snapshot_hook.py" "$settings_file" 2>/dev/null; then
         cecho "${YELLOW}Found hooks in: $settings_file${NC}"
         echo "This file contains other settings that should be preserved."
         printf "Remove hooks configuration from settings.json? [Y/n]: "
@@ -101,7 +115,7 @@ fi
 
 # Also check for legacy hooks.json files
 if [ -f "$HOME/.claude/hooks.json" ]; then
-    if grep -q "notification_hook.py" "$HOME/.claude/hooks.json" 2>/dev/null; then
+    if grep -q "notification_hook.py\|goal_tracker.py\|progress_tracker.py\|notification_tracker.py\|snapshot_hook.py" "$HOME/.claude/hooks.json" 2>/dev/null; then
         cecho "${YELLOW}Found legacy hooks.json: ~/.claude/hooks.json${NC}"
         printf "Remove legacy hooks.json? [Y/n]: "
         read remove_hook
@@ -172,9 +186,8 @@ fi
 cecho "\n${GREEN}=== Uninstallation Complete ===${NC}"
 echo "Removed:"
 echo "  • ClaudeMonitor.app"
-echo "  • ~/.claude-hooks/ (hook.py, notification_hook.py, stop_hook.py, config.sh)"
-echo "  • API profiles (api_manager.py, api_profiles.json)"
-echo "  • Account config (account_manager.py, accounts.json)"
+echo "  • ~/.claude-hooks/ (scripts, hooks, config.sh)"
+echo "  • ~/.claude-task-tracker/ (database, logs, config)"
 echo "  • Hooks configuration from settings.json files"
 echo "  • Legacy hooks.json files (if any)"
 echo "  • Shell configuration entries"
