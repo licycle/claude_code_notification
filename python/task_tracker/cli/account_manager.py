@@ -117,20 +117,24 @@ def list_accounts():
         print(f"  🔹 {alias} -> {path} [{exists}]")
 
 def configure_hooks_for_account(config_path):
-    """Configure hooks for an account"""
-    hook_script = os.path.expanduser("~/.claude-hooks/notification_hook.py")
-    stop_hook = os.path.expanduser("~/.claude-hooks/stop_hook.py")
+    """Configure Task Tracker hooks for an account"""
+    base_dir = os.path.expanduser("~/.claude-hooks")
     settings_file = os.path.join(config_path, "settings.json")
 
+    # Task Tracker hooks (unified architecture)
     hooks_config = {
-        "Notification": [
-            {"matcher": "idle_prompt", "hooks": [{"type": "command", "command": hook_script, "timeout": 10}]},
-            {"matcher": "permission_prompt", "hooks": [{"type": "command", "command": hook_script, "timeout": 10}]},
-            {"matcher": "elicitation_dialog", "hooks": [{"type": "command", "command": hook_script, "timeout": 10}]},
-            {"matcher": "auth_success", "hooks": [{"type": "command", "command": hook_script, "timeout": 10}]},
-            {"matcher": "", "hooks": [{"type": "command", "command": hook_script, "timeout": 10}]}
+        "UserPromptSubmit": [
+            {"hooks": [{"type": "command", "command": f"python3 {base_dir}/task_tracker/hooks/goal_tracker.py", "timeout": 5}]}
         ],
-        "Stop": [{"hooks": [{"type": "command", "command": stop_hook, "timeout": 15}]}]
+        "PostToolUse": [
+            {"matcher": "TodoWrite|AskUserQuestion", "hooks": [{"type": "command", "command": f"python3 {base_dir}/task_tracker/hooks/progress_tracker.py", "timeout": 5}]}
+        ],
+        "Notification": [
+            {"hooks": [{"type": "command", "command": f"python3 {base_dir}/task_tracker/hooks/notification_tracker.py", "timeout": 10}]}
+        ],
+        "Stop": [
+            {"hooks": [{"type": "command", "command": f"python3 {base_dir}/task_tracker/hooks/snapshot_hook.py", "timeout": 30}]}
+        ]
     }
 
     try:

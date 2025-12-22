@@ -6,6 +6,8 @@ Common utilities for all hook scripts
 import sys
 import json
 import os
+import re
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 
@@ -13,19 +15,53 @@ from typing import Dict, List, Optional, Any
 TASK_TRACKER_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(TASK_TRACKER_DIR))
 
-LOG_FILE = Path.home() / '.claude-task-tracker' / 'logs' / 'hooks.log'
+LOG_DIR = Path.home() / '.claude-task-tracker' / 'logs'
 
 
-def log(tag: str, msg: str):
-    """Write to log file"""
+def log(tag: str, msg: str, log_file: str = 'hooks.log'):
+    """Write to log file
+
+    Args:
+        tag: Log tag (e.g., 'GOAL', 'PROGRESS', 'ERROR')
+        msg: Log message
+        log_file: Log file name (default: hooks.log)
+    """
     try:
-        LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-        with open(LOG_FILE, 'a') as f:
-            from datetime import datetime
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+        log_path = LOG_DIR / log_file
+        with open(log_path, 'a') as f:
             ts = datetime.now().strftime("%H:%M:%S")
             f.write(f"[{ts}] [{tag}] {msg}\n")
     except Exception:
         pass
+
+
+def get_account_alias() -> str:
+    """Get account alias from environment variable or infer from config path"""
+    alias = os.environ.get('CLAUDE_ACCOUNT_ALIAS')
+    if alias:
+        return alias
+
+    config_dir = os.environ.get('CLAUDE_CONFIG_DIR', '')
+    if config_dir:
+        basename = Path(config_dir).name
+        if basename == '.claude':
+            return 'default'
+        elif basename.startswith('.claude-'):
+            return basename[8:]
+
+    return 'default'
+
+
+def get_env_info() -> Dict[str, str]:
+    """Get terminal environment info from environment variables"""
+    return {
+        'bundle_id': os.environ.get('CLAUDE_TERM_BUNDLE_ID', 'com.apple.Terminal'),
+        'pid': os.environ.get('CLAUDE_TERM_PID', '0'),
+        'window_id': os.environ.get('CLAUDE_CG_WINDOW_ID', '0'),
+        'account_alias': get_account_alias(),
+        'config_dir': os.environ.get('CLAUDE_CONFIG_DIR', '')
+    }
 
 
 def read_hook_input() -> Dict:
@@ -108,7 +144,6 @@ def extract_last_message(events: List[Dict], msg_type: str, strip_system_reminde
 
             # Strip system reminders if requested
             if strip_system_reminders and msg_type == 'assistant':
-                import re
                 text = re.sub(r'<system-reminder>[\s\S]*?</system-reminder>', '', text)
                 text = re.sub(r'\n{3,}', '\n\n', text).strip()
 

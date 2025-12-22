@@ -7,38 +7,21 @@ v2: Uses notification_formatter for structured title/subtitle/body format
 """
 import json
 import subprocess
-import os
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, Optional, List
+from typing import Dict, List
 
 from .notification_formatter import format_notification, get_category_identifier
+from ..hooks.utils import log, get_env_info
 
 # Paths
 STATE_DIR = Path.home() / '.claude-task-tracker' / 'state'
 BIN_PATH = Path.home() / 'Applications' / 'ClaudeMonitor.app' / 'Contents' / 'MacOS' / 'ClaudeMonitor'
-LOG_FILE = Path.home() / '.claude-task-tracker' / 'logs' / 'notification.log'
 
 
-def log(tag: str, msg: str):
-    """Write to log file"""
-    try:
-        LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-        with open(LOG_FILE, 'a') as f:
-            ts = datetime.now().strftime("%H:%M:%S")
-            f.write(f"[{ts}] [{tag}] {msg}\n")
-    except Exception:
-        pass
-
-
-def get_env_info() -> Dict:
-    """Get terminal environment info from environment variables"""
-    return {
-        'bundle_id': os.environ.get('CLAUDE_TERM_BUNDLE_ID', 'com.apple.Terminal'),
-        'pid': os.environ.get('CLAUDE_TERM_PID', '0'),
-        'window_id': os.environ.get('CLAUDE_CG_WINDOW_ID', '0'),
-        'account_alias': os.environ.get('CLAUDE_ACCOUNT_ALIAS', 'default')
-    }
+def _log(tag: str, msg: str):
+    """Wrapper for log with notification-specific log file"""
+    log(tag, msg, log_file='notification.log')
 
 
 def send_rich_notification(
@@ -137,10 +120,10 @@ def _send_via_swift_app(payload: Dict, env_info: Dict) -> bool:
             env_info['window_id']
         ]
 
-        log("SEND", f"Calling: {cmd[0]} notify ...")
-        log("SEND", f"  title: {formatted['title']}")
-        log("SEND", f"  subtitle: {formatted['subtitle']}")
-        log("SEND", f"  body: {formatted['body'][:50]}...")
+        _log("SEND", f"Calling: {cmd[0]} notify ...")
+        _log("SEND", f"  title: {formatted['title']}")
+        _log("SEND", f"  subtitle: {formatted['subtitle']}")
+        _log("SEND", f"  body: {formatted['body'][:50]}...")
 
         result = subprocess.run(
             cmd,
@@ -150,21 +133,21 @@ def _send_via_swift_app(payload: Dict, env_info: Dict) -> bool:
         )
 
         if result.returncode == 0:
-            log("SUCCESS", f"Notification sent: {formatted['title']}")
+            _log("SUCCESS", f"Notification sent: {formatted['title']}")
             return True
         else:
-            log("ERROR", f"Failed with code {result.returncode}: {result.stderr}")
+            _log("ERROR", f"Failed with code {result.returncode}: {result.stderr}")
             return False
 
     except subprocess.TimeoutExpired:
-        log("ERROR", "Notification timeout")
+        _log("ERROR", "Notification timeout")
         return False
     except FileNotFoundError:
-        log("ERROR", f"ClaudeMonitor not found at {BIN_PATH}")
+        _log("ERROR", f"ClaudeMonitor not found at {BIN_PATH}")
         # Fallback to osascript
         return _send_via_osascript(payload)
     except Exception as e:
-        log("ERROR", f"Failed to send notification: {e}")
+        _log("ERROR", f"Failed to send notification: {e}")
         return False
 
 
@@ -183,11 +166,11 @@ def _send_via_osascript(payload: Dict) -> bool:
             timeout=5
         )
 
-        log("SUCCESS", f"Sent via osascript: {title}")
+        _log("SUCCESS", f"Sent via osascript: {title}")
         return True
 
     except Exception as e:
-        log("ERROR", f"osascript fallback failed: {e}")
+        _log("ERROR", f"osascript fallback failed: {e}")
         return False
 
 
@@ -217,10 +200,10 @@ def _write_state_file(session_id: str, payload: Dict):
         with open(all_sessions_file, 'w') as f:
             json.dump(all_sessions, f, indent=2, ensure_ascii=False)
 
-        log("STATE", f"Wrote state for session {session_id}")
+        _log("STATE", f"Wrote state for session {session_id}")
 
     except Exception as e:
-        log("ERROR", f"Failed to write state file: {e}")
+        _log("ERROR", f"Failed to write state file: {e}")
 
 
 # Convenience functions for different notification types

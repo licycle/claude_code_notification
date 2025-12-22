@@ -136,30 +136,35 @@ chmod +x "$BINARY_PATH"
 # Create Resources directory (for app icon)
 mkdir -p "$INSTALL_DIR/Contents/Resources"
 
-# Copy app icon if it exists
-if [ -f "$SCRIPT_DIR/app_icon.png" ]; then
-    cp "$SCRIPT_DIR/app_icon.png" "$INSTALL_DIR/Contents/Resources/app_icon.png"
+# Copy app icon if it exists (from assets/ directory)
+ASSETS_DIR="$SCRIPT_DIR/assets"
+if [ -f "$ASSETS_DIR/app_icon.png" ]; then
+    cp "$ASSETS_DIR/app_icon.png" "$INSTALL_DIR/Contents/Resources/app_icon.png"
     cecho "${GREEN}✅ App icon copied${NC}"
 else
-    cecho "${YELLOW}[!] No app_icon.png found, skipping icon installation${NC}"
+    cecho "${YELLOW}[!] No app_icon.png found in assets/, skipping icon installation${NC}"
 fi
 
-# Create .icns icon file if possible
-if command -v iconutil >/dev/null 2>&1 && [ -f "$SCRIPT_DIR/app_icon.png" ]; then
-    mkdir -p "$SCRIPT_DIR/AppIcon.iconset"
-    sips -z 16 16 "$SCRIPT_DIR/app_icon.png" --out "$SCRIPT_DIR/AppIcon.iconset/icon_16x16.png" >/dev/null 2>&1
-    sips -z 32 32 "$SCRIPT_DIR/app_icon.png" --out "$SCRIPT_DIR/AppIcon.iconset/icon_16x16@2x.png" >/dev/null 2>&1
-    sips -z 32 32 "$SCRIPT_DIR/app_icon.png" --out "$SCRIPT_DIR/AppIcon.iconset/icon_32x32.png" >/dev/null 2>&1
-    sips -z 64 64 "$SCRIPT_DIR/app_icon.png" --out "$SCRIPT_DIR/AppIcon.iconset/icon_32x32@2x.png" >/dev/null 2>&1
-    sips -z 128 128 "$SCRIPT_DIR/app_icon.png" --out "$SCRIPT_DIR/AppIcon.iconset/icon_128x128.png" >/dev/null 2>&1
-    sips -z 256 256 "$SCRIPT_DIR/app_icon.png" --out "$SCRIPT_DIR/AppIcon.iconset/icon_128x128@2x.png" >/dev/null 2>&1
-    sips -z 256 256 "$SCRIPT_DIR/app_icon.png" --out "$SCRIPT_DIR/AppIcon.iconset/icon_256x256.png" >/dev/null 2>&1
-    sips -z 512 512 "$SCRIPT_DIR/app_icon.png" --out "$SCRIPT_DIR/AppIcon.iconset/icon_256x256@2x.png" >/dev/null 2>&1
-    sips -z 512 512 "$SCRIPT_DIR/app_icon.png" --out "$SCRIPT_DIR/AppIcon.iconset/icon_512x512.png" >/dev/null 2>&1
-    sips -z 1024 1024 "$SCRIPT_DIR/app_icon.png" --out "$SCRIPT_DIR/AppIcon.iconset/icon_512x512@2x.png" >/dev/null 2>&1
+# Copy .icns icon if it exists, or create it
+if [ -f "$ASSETS_DIR/AppIcon.icns" ]; then
+    cp "$ASSETS_DIR/AppIcon.icns" "$INSTALL_DIR/Contents/Resources/"
+    cecho "${GREEN}✅ .icns icon installed${NC}"
+elif command -v iconutil >/dev/null 2>&1 && [ -f "$ASSETS_DIR/app_icon.png" ]; then
+    # Create .icns from png if not exists
+    mkdir -p "$ASSETS_DIR/AppIcon.iconset"
+    sips -z 16 16 "$ASSETS_DIR/app_icon.png" --out "$ASSETS_DIR/AppIcon.iconset/icon_16x16.png" >/dev/null 2>&1
+    sips -z 32 32 "$ASSETS_DIR/app_icon.png" --out "$ASSETS_DIR/AppIcon.iconset/icon_16x16@2x.png" >/dev/null 2>&1
+    sips -z 32 32 "$ASSETS_DIR/app_icon.png" --out "$ASSETS_DIR/AppIcon.iconset/icon_32x32.png" >/dev/null 2>&1
+    sips -z 64 64 "$ASSETS_DIR/app_icon.png" --out "$ASSETS_DIR/AppIcon.iconset/icon_32x32@2x.png" >/dev/null 2>&1
+    sips -z 128 128 "$ASSETS_DIR/app_icon.png" --out "$ASSETS_DIR/AppIcon.iconset/icon_128x128.png" >/dev/null 2>&1
+    sips -z 256 256 "$ASSETS_DIR/app_icon.png" --out "$ASSETS_DIR/AppIcon.iconset/icon_128x128@2x.png" >/dev/null 2>&1
+    sips -z 256 256 "$ASSETS_DIR/app_icon.png" --out "$ASSETS_DIR/AppIcon.iconset/icon_256x256.png" >/dev/null 2>&1
+    sips -z 512 512 "$ASSETS_DIR/app_icon.png" --out "$ASSETS_DIR/AppIcon.iconset/icon_256x256@2x.png" >/dev/null 2>&1
+    sips -z 512 512 "$ASSETS_DIR/app_icon.png" --out "$ASSETS_DIR/AppIcon.iconset/icon_512x512.png" >/dev/null 2>&1
+    sips -z 1024 1024 "$ASSETS_DIR/app_icon.png" --out "$ASSETS_DIR/AppIcon.iconset/icon_512x512@2x.png" >/dev/null 2>&1
 
-    if iconutil -c icns "$SCRIPT_DIR/AppIcon.iconset" -o "$SCRIPT_DIR/AppIcon.icns" 2>/dev/null; then
-        cp "$SCRIPT_DIR/AppIcon.icns" "$INSTALL_DIR/Contents/Resources/"
+    if iconutil -c icns "$ASSETS_DIR/AppIcon.iconset" -o "$ASSETS_DIR/AppIcon.icns" 2>/dev/null; then
+        cp "$ASSETS_DIR/AppIcon.icns" "$INSTALL_DIR/Contents/Resources/"
         cecho "${GREEN}✅ .icns icon created and installed${NC}"
     fi
 fi
@@ -199,18 +204,20 @@ cecho "${GREEN}✅ App Registered with macOS Notification Center${NC}"
 # ================= 3. Install Scripts =================
 cecho "${YELLOW}[3/7] Installing Managers...${NC}"
 
-# Check required Python files (always needed)
-for pyfile in api_manager.py account_manager.py hook.py; do
-    if [ ! -f "$SCRIPT_DIR/python/$pyfile" ]; then
-        cecho "${RED}❌ Error: $pyfile not found in $SCRIPT_DIR/python/${NC}"
+# CLI tools are now in python/task_tracker/cli/
+CLI_SRC="$SCRIPT_DIR/python/task_tracker/cli"
+
+# Check required Python files
+for pyfile in api_manager.py account_manager.py; do
+    if [ ! -f "$CLI_SRC/$pyfile" ]; then
+        cecho "${RED}❌ Error: $pyfile not found in $CLI_SRC/${NC}"
         exit 1
     fi
 done
 
-# Copy core Python scripts (always needed)
-cp "$SCRIPT_DIR/python/hook.py" "$BASE_DIR/hook.py"
-cp "$SCRIPT_DIR/python/api_manager.py" "$API_MANAGER_SCRIPT"
-cp "$SCRIPT_DIR/python/account_manager.py" "$ACCOUNT_MANAGER_SCRIPT"
+# Copy CLI Python scripts
+cp "$CLI_SRC/api_manager.py" "$API_MANAGER_SCRIPT"
+cp "$CLI_SRC/account_manager.py" "$ACCOUNT_MANAGER_SCRIPT"
 
 chmod +x "$BASE_DIR/"*.py
 cecho "${GREEN}✅ Scripts installed${NC}"
