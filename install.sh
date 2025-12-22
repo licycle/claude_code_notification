@@ -76,11 +76,13 @@ if [ "$1" = "--app-only" ] || [ "$1" = "-a" ]; then
     SWIFT_DIR="$SCRIPT_DIR/swift"
     cecho "${YELLOW}Compiling Swift...${NC}"
     swiftc \
-        "$SWIFT_DIR/Logger.swift" \
-        "$SWIFT_DIR/PermissionManager.swift" \
-        "$SWIFT_DIR/AppDelegate.swift" \
-        "$SWIFT_DIR/SettingsWindow.swift" \
-        "$SWIFT_DIR/Main.swift" \
+        "$SWIFT_DIR/Utils/Logger.swift" \
+        "$SWIFT_DIR/Utils/PermissionManager.swift" \
+        "$SWIFT_DIR/Services/DatabaseManager.swift" \
+        "$SWIFT_DIR/UI/StatusBarController.swift" \
+        "$SWIFT_DIR/Core/AppDelegate.swift" \
+        "$SWIFT_DIR/UI/SettingsWindow.swift" \
+        "$SWIFT_DIR/Core/Main.swift" \
         -o "$BINARY_PATH" \
         -target arm64-apple-macosx12.0
     chmod +x "$BINARY_PATH"
@@ -213,7 +215,7 @@ cecho "${YELLOW}[1/7] Compiling Swift Core...${NC}"
 mkdir -p "$INSTALL_DIR/Contents/MacOS"
 
 SWIFT_DIR="$SCRIPT_DIR/swift"
-SWIFT_FILES="Logger.swift PermissionManager.swift AppDelegate.swift SettingsWindow.swift Main.swift"
+SWIFT_FILES="Utils/Logger.swift Utils/PermissionManager.swift Services/DatabaseManager.swift UI/StatusBarController.swift Core/AppDelegate.swift UI/SettingsWindow.swift Core/Main.swift"
 
 for swiftfile in $SWIFT_FILES; do
     if [ ! -f "$SWIFT_DIR/$swiftfile" ]; then
@@ -223,11 +225,13 @@ for swiftfile in $SWIFT_FILES; do
 done
 
 swiftc \
-    "$SWIFT_DIR/Logger.swift" \
-    "$SWIFT_DIR/PermissionManager.swift" \
-    "$SWIFT_DIR/AppDelegate.swift" \
-    "$SWIFT_DIR/SettingsWindow.swift" \
-    "$SWIFT_DIR/Main.swift" \
+    "$SWIFT_DIR/Utils/Logger.swift" \
+    "$SWIFT_DIR/Utils/PermissionManager.swift" \
+    "$SWIFT_DIR/Services/DatabaseManager.swift" \
+    "$SWIFT_DIR/UI/StatusBarController.swift" \
+    "$SWIFT_DIR/Core/AppDelegate.swift" \
+    "$SWIFT_DIR/UI/SettingsWindow.swift" \
+    "$SWIFT_DIR/Core/Main.swift" \
     -o "$BINARY_PATH" \
     -target arm64-apple-macosx12.0
 chmod +x "$BINARY_PATH"

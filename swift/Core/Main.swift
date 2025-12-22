@@ -119,20 +119,35 @@ struct ClaudeMonitorApp {
                 app.run()
             }
 
+            // [Mode 4: Sessions]
+            // Shows menu bar with sessions popover
+            else if mode == "sessions" {
+                log("SESSIONS: Starting with menu bar")
+                app.setActivationPolicy(.accessory)
+                // StatusBarController is initialized in AppDelegate.applicationDidFinishLaunching
+                // Show popover after a brief delay
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    delegate.statusBarController?.showPopover()
+                }
+                app.run()
+            }
+
             // Unknown mode
             else {
-                print("Usage: ClaudeMonitor <detect|notify|gui>")
+                print("Usage: ClaudeMonitor <detect|notify|gui|sessions>")
                 print("  detect              - Detect frontmost app (outputs bundleID|PID|CGWindowID)")
                 print("  notify <t> <m> ...  - Send notification")
                 print("  gui                 - Show settings window")
+                print("  sessions            - Show sessions in menu bar popover")
                 exit(1)
             }
         } else {
-            // [Mode 4: Default - Smart launch]
-            // Start in background, AppDelegate will detect if launched from:
+            // [Mode 5: Default - Smart launch with menu bar]
+            // Start in background with menu bar icon, AppDelegate will detect if launched from:
             // - Notification click: stay in background, activate target window
             // - App icon click: show settings window (switch to regular mode)
-            log("LAUNCH: Starting in background mode (auto-detect)")
+            // - Menu bar icon: always visible for session monitoring
+            log("LAUNCH: Starting in background mode with menu bar (auto-detect)")
             app.setActivationPolicy(.accessory)
             app.run()
         }

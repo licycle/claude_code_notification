@@ -49,7 +49,16 @@
       "Bash(TRANSCRIPT=\"/Users/wukangda/.claude/projects/-Users-wukangda-Desktop-claude-notification/97f39cae-8b7b-4f98-8f27-3db46884ddb8.jsonl\" echo \"=== 所有包含 ''''user sent'''' 的内容 ===\" grep -o \"user sent the following message[^P]*Please\" \"$TRANSCRIPT\")",
       "Bash(defaults read:*)",
       "Bash(defaults:*)",
-      "WebFetch(domain:platform.moonshot.ai)"
+      "WebFetch(domain:platform.moonshot.ai)",
+      "Bash(swift/DatabaseManager.swift )",
+      "Bash(swift/StatusBarController.swift )",
+      "Bash(swift/Utils/Logger.swift )",
+      "Bash(swift/Utils/PermissionManager.swift )",
+      "Bash(swift/Services/DatabaseManager.swift )",
+      "Bash(swift/UI/StatusBarController.swift )",
+      "Bash(swift/Core/AppDelegate.swift )",
+      "Bash(swift/UI/SettingsWindow.swift )",
+      "Bash(swift/Core/Main.swift )"
     ]
   }
 }

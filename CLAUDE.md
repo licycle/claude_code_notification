@@ -78,11 +78,17 @@ Claude Monitor 是一个 macOS 原生应用，为 Claude Code 提供桌面通知
 │           └── notification_formatter.py # 通知格式化
 │
 └── swift/                    # Swift 原生应用
-    ├── Logger.swift
-    ├── PermissionManager.swift
-    ├── AppDelegate.swift
-    ├── SettingsWindow.swift
-    └── Main.swift
+    ├── Core/                 # 核心组件
+    │   ├── AppDelegate.swift         # 应用代理
+    │   └── Main.swift                # 入口点
+    ├── UI/                   # 用户界面
+    │   ├── StatusBarController.swift # 状态栏控制器
+    │   └── SettingsWindow.swift      # 设置窗口
+    ├── Services/             # 服务层
+    │   └── DatabaseManager.swift     # 数据库管理
+    └── Utils/                # 工具类
+        ├── Logger.swift              # 日志工具
+        └── PermissionManager.swift   # 权限管理
 ```
 
 ## Hook 事件处理
@@ -132,18 +138,26 @@ Claude Monitor 是一个 macOS 原生应用，为 Claude Code 提供桌面通知
 ## 构建命令
 
 ```bash
-# 编译 Swift 应用
+# 编译 Swift 应用（按依赖顺序）
 swiftc \
-  swift/Logger.swift \
-  swift/PermissionManager.swift \
-  swift/AppDelegate.swift \
-  swift/SettingsWindow.swift \
-  swift/Main.swift \
+  swift/Utils/Logger.swift \
+  swift/Utils/PermissionManager.swift \
+  swift/Services/DatabaseManager.swift \
+  swift/UI/StatusBarController.swift \
+  swift/Core/AppDelegate.swift \
+  swift/UI/SettingsWindow.swift \
+  swift/Core/Main.swift \
   -o ClaudeMonitor \
   -target arm64-apple-macosx12.0
 
 # 完整安装（交互式）
 ./install.sh
+
+# 快速重建应用（仅编译）
+./install.sh --app-only
+
+# 快速更新 Python hooks
+./install.sh --hooks-only
 
 # 卸载
 ./uninstall_monitor.sh
@@ -200,11 +214,13 @@ Python 调用 ClaudeMonitor 发送通知
 ## Swift 文件编译顺序
 
 必须按依赖顺序编译：
-1. `Logger.swift` - 无依赖
-2. `PermissionManager.swift` - 依赖 Logger
-3. `AppDelegate.swift` - 依赖 Logger, PermissionManager
-4. `SettingsWindow.swift` - 依赖 Logger, PermissionManager
-5. `Main.swift` - 入口点，依赖以上所有
+1. `Utils/Logger.swift` - 无依赖，提供日志功能
+2. `Utils/PermissionManager.swift` - 依赖 Logger，管理系统权限
+3. `Services/DatabaseManager.swift` - 依赖 Logger，管理 SQLite 数据库
+4. `UI/StatusBarController.swift` - 依赖 Logger, DatabaseManager，状态栏 UI
+5. `Core/AppDelegate.swift` - 依赖 Logger, PermissionManager, StatusBarController
+6. `UI/SettingsWindow.swift` - 依赖 Logger, PermissionManager，设置窗口
+7. `Core/Main.swift` - 入口点，依赖以上所有
 
 ## 代码规范
 

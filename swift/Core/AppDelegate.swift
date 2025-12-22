@@ -12,6 +12,7 @@ func _AXUIElementGetWindow(_ element: AXUIElement, _ windowID: UnsafeMutablePoin
 class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
 
     var settingsWindowController: SettingsWindowController?
+    var statusBarController: StatusBarController?
     var launchedFromNotification = false
 
     func applicationWillFinishLaunching(_ notification: Notification) {
@@ -26,6 +27,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
         // Setup standard Edit menu for copy/paste support
         setupEditMenu()
+
+        // Initialize status bar (menu bar icon)
+        statusBarController = StatusBarController()
+
+        // Listen for settings window requests from status bar
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleShowSettingsWindow),
+            name: .showSettingsWindow,
+            object: nil
+        )
 
         // Check if launched from notification click after a short delay
         // If no notification event received, this is a user-initiated launch (click app icon)
@@ -73,6 +85,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         settingsWindowController = SettingsWindowController()
         settingsWindowController?.showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    @objc func handleShowSettingsWindow() {
+        showSettingsWindow()
     }
 
     // MARK: - Handle Notification Click and Actions
