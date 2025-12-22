@@ -60,11 +60,23 @@ def main():
         handle_permission(session_id, project_name, message)
 
     elif notification_type == 'auth_success':
-        # Just log, no notification needed
-        log("NOTIF", "Auth success event")
+        # Just log, no notification needed for auth success
+        log("NOTIF", "Auth success event - no notification")
 
     else:
-        log("NOTIF", f"Unknown notification type: {notification_type}")
+        # Handle any other notification types
+        log("NOTIF", f"Other notification type: {notification_type}")
+        # Send a generic notification if we have a message
+        if message:
+            from services.notification import send_rich_notification
+            send_rich_notification(
+                session_id=session_id,
+                title=f"Claude - {project_name}",
+                message=message[:100],
+                notification_type=notification_type or 'info',
+                project_name=project_name,
+                sound='Glass'
+            )
 
     write_hook_output()
 

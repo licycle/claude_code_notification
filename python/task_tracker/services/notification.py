@@ -2,6 +2,8 @@
 """
 notification.py - Rich Notification Service
 Sends rich notifications via ClaudeMonitor Swift app
+
+v2: Uses notification_formatter for structured title/subtitle/body format
 """
 import json
 import subprocess
@@ -9,6 +11,8 @@ import os
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Optional, List
+
+from .notification_formatter import format_notification, get_category_identifier
 
 # Paths
 STATE_DIR = Path.home() / '.claude-task-tracker' / 'state'
@@ -94,50 +98,49 @@ def send_rich_notification(
 
 
 def _send_via_swift_app(payload: Dict, env_info: Dict) -> bool:
-    """Send notification via ClaudeMonitor Swift app"""
+    """Send notification via ClaudeMonitor Swift app (v2 format)"""
     try:
-        # Format title with account alias
-        alias = env_info['account_alias']
-        title = payload['title']
-        if alias and alias != 'default':
-            title = f"{title} [{alias}]"
-
-        # Build rich message body
-        message_parts = []
-
-        # Add progress bar if available
+        # Use v2 formatter for structured notification
         progress = payload.get('progress', {})
-        if progress.get('total', 0) > 0:
-            completed = progress.get('completed', 0)
-            total = progress['total']
-            bar_length = 10
-            filled = int(bar_length * completed / total)
-            bar = '█' * filled + '░' * (bar_length - filled)
-            message_parts.append(f"{bar} {completed}/{total}")
-
-        # Add main message
-        message_parts.append(payload['message'])
-
-        # Add pending question if any
         pending = payload.get('pending_decision')
-        if pending and pending.get('question'):
-            message_parts.append(f"⚠️ {pending['question']}")
+        summary = payload.get('summary', {}) or {}
 
-        body = '\n'.join(message_parts)
+        formatted = format_notification(
+            notification_type=payload.get('notification_type', 'idle'),
+            session_id=payload.get('session_id', ''),
+            account_alias=env_info['account_alias'],
+            completed=progress.get('completed', 0),
+            total=progress.get('total', 0),
+            current_task=summary.get('current_task') or payload.get('message', ''),
+            project_name=payload.get('project_name', ''),
+            original_goal=payload.get('original_goal', ''),
+            message=payload.get('message', ''),
+            pending_question=pending.get('question') if pending else None,
+            summary=summary  # Pass summary for raw mode detection
+        )
 
-        # Call Swift app
+        # Get category identifier
+        category = get_category_identifier(payload.get('notification_type', 'idle'))
+
+        # Call Swift app with v2 format (includes subtitle)
+        # Args: notify <title> <message> <subtitle> <sound> <category> <bundle_id> <pid> <cgWindowID>
         cmd = [
             str(BIN_PATH),
             'notify',
-            title,
-            body,
+            formatted['title'],
+            formatted['body'],
+            formatted['subtitle'],
             payload.get('sound', 'Glass'),
+            category,
             env_info['bundle_id'],
             env_info['pid'],
             env_info['window_id']
         ]
 
         log("SEND", f"Calling: {cmd[0]} notify ...")
+        log("SEND", f"  title: {formatted['title']}")
+        log("SEND", f"  subtitle: {formatted['subtitle']}")
+        log("SEND", f"  body: {formatted['body'][:50]}...")
 
         result = subprocess.run(
             cmd,
@@ -147,7 +150,7 @@ def _send_via_swift_app(payload: Dict, env_info: Dict) -> bool:
         )
 
         if result.returncode == 0:
-            log("SUCCESS", f"Notification sent: {title}")
+            log("SUCCESS", f"Notification sent: {formatted['title']}")
             return True
         else:
             log("ERROR", f"Failed with code {result.returncode}: {result.stderr}")
@@ -240,7 +243,8 @@ def notify_task_idle(session_id: str, project_name: str, original_goal: str,
 
 
 def notify_decision_needed(session_id: str, project_name: str, question: str,
-                           options: List[str] = None, completed: int = 0, total: int = 0):
+                           options: List[str] = None, completed: int = 0, total: int = 0,
+                           summary: Dict = None):
     """Notify that user decision is needed"""
     return send_rich_notification(
         session_id=session_id,
@@ -252,6 +256,7 @@ def notify_decision_needed(session_id: str, project_name: str, question: str,
         pending_options=options,
         progress_completed=completed,
         progress_total=total,
+        summary=summary,
         sound='Sosumi'
     )
 

@@ -195,6 +195,48 @@ class ExtractionOnlyProvider(SummaryProvider):
         }
 
 
+class DisabledProvider(SummaryProvider):
+    """
+    No AI summary - returns raw user prompt and pending question.
+    Used when summary AI is disabled in settings.
+    """
+
+    def __init__(self, config: dict):
+        self.max_length = config.get('max_preview_length', 150)
+
+    def generate_summary(self, context: dict) -> dict:
+        import re
+
+        # Get raw user message (last user prompt)
+        last_user = context.get('last_user_message', '')
+        if last_user:
+            # Remove system reminders
+            last_user = re.sub(r'<system-reminder>[\s\S]*?</system-reminder>', '', last_user)
+            last_user = last_user.strip()
+
+        # Get pending question (AI needs user assistance)
+        pending_question = context.get('pending_question', '')
+
+        # Get current in-progress todo
+        todos = context.get('todos', [])
+        in_progress_task = None
+        for todo in todos:
+            if todo.get('status') == 'in_progress':
+                in_progress_task = todo.get('content', '')[:60]
+                break
+
+        completed = sum(1 for t in todos if t.get('status') == 'completed')
+        total = len(todos)
+
+        return {
+            "mode": "raw",  # Flag for formatter to use raw display
+            "user_prompt": last_user[:self.max_length] if last_user else None,
+            "pending_question": pending_question[:self.max_length] if pending_question else None,
+            "current_task": in_progress_task or context.get('original_goal', '')[:60],
+            "progress_summary": f"{completed}/{total}" if total > 0 else None,
+        }
+
+
 class SummaryService:
     """Summary service - selects provider based on config"""
 
@@ -228,6 +270,10 @@ class SummaryService:
         summary_config = self.config.get('summary', {})
         provider_type = summary_config.get('provider', 'auto')
 
+        # Check if explicitly disabled
+        if provider_type == 'disabled' or summary_config.get('disabled'):
+            return DisabledProvider(summary_config)
+
         # Auto-select logic
         if provider_type == 'auto':
             third_party = summary_config.get('third_party', {})
@@ -236,14 +282,16 @@ class SummaryService:
             elif summary_config.get('extraction_only', {}).get('enabled'):
                 provider_type = 'extraction_only'
             else:
-                # Default to extraction only (no API cost)
-                provider_type = 'extraction_only'
+                # Default to disabled (raw display, no AI)
+                provider_type = 'disabled'
 
         # Create provider
         if provider_type == 'third_party':
             return ThirdPartyProvider(summary_config.get('third_party', {}))
         elif provider_type == 'claude_session':
             return ClaudeSessionProvider(summary_config.get('claude_session', {}))
+        elif provider_type == 'disabled':
+            return DisabledProvider(summary_config)
         else:
             return ExtractionOnlyProvider(summary_config.get('extraction_only', {}))
 

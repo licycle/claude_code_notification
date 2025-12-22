@@ -2,9 +2,12 @@
 """
 snapshot_hook.py - Stop Hook
 Generates task snapshot and summary when Claude stops
+Also handles rate limit detection (merged from stop_hook.py)
 """
 import sys
+import os
 from pathlib import Path
+from collections import deque
 
 # Add parent paths for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -20,7 +23,57 @@ from services.database import (
     get_progress, get_pending_decisions
 )
 from services.summary_service import get_summary_service
-from services.notification import notify_task_idle, notify_decision_needed
+from services.notification import (
+    notify_task_idle, notify_decision_needed, send_rich_notification
+)
+
+# Rate limit detection keywords
+RATE_LIMIT_KEYWORDS = [
+    'rate limit', 'rate_limit', 'too many requests',
+    '429', 'quota exceeded', 'overloaded'
+]
+
+
+def get_last_n_lines(filepath, n=3):
+    """Read last n lines from file efficiently"""
+    try:
+        with open(os.path.expanduser(filepath), 'rb') as f:
+            return deque(f, n)
+    except Exception as e:
+        log("SNAPSHOT", f"Failed to read file: {e}")
+        return []
+
+
+def detect_rate_limit(transcript_path):
+    """Check last 3 records in transcript for rate limit errors"""
+    if not transcript_path:
+        return False, None
+
+    last_lines = get_last_n_lines(transcript_path, 3)
+
+    for line in last_lines:
+        try:
+            content = line.decode('utf-8', errors='ignore').lower()
+            for keyword in RATE_LIMIT_KEYWORDS:
+                if keyword in content:
+                    return True, keyword
+        except:
+            pass
+
+    return False, None
+
+
+def notify_rate_limit(session_id: str, project_name: str, keyword: str):
+    """Send rate limit notification"""
+    account_alias = os.environ.get('CLAUDE_ACCOUNT_ALIAS', 'default')
+    return send_rich_notification(
+        session_id=session_id,
+        title=f"Rate Limit [{account_alias}]",
+        message=f"Claude API rate limit detected ({keyword})",
+        notification_type='rate_limited',
+        project_name=project_name,
+        sound='Basso'
+    )
 
 
 def main():
@@ -108,6 +161,16 @@ def main():
     # Save snapshot to database
     save_snapshot(session_id, last_user, last_assistant, summary)
 
+    # Check for rate limit FIRST (before other notifications)
+    has_rate_limit, rate_limit_keyword = detect_rate_limit(transcript_path)
+    if has_rate_limit:
+        log("SNAPSHOT", f"Rate limit detected: {rate_limit_keyword}")
+        update_session_status(session_id, 'rate_limited')
+        notify_rate_limit(session_id, project_name, rate_limit_keyword)
+        log("SNAPSHOT", "Rate limit notification sent")
+        write_hook_output()
+        return
+
     # Update session status
     update_session_status(session_id, 'idle')
 
@@ -120,7 +183,8 @@ def main():
             question=pending_question,
             options=pending_options,
             completed=completed,
-            total=total
+            total=total,
+            summary=summary
         )
     else:
         # Normal idle notification with summary

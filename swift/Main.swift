@@ -53,19 +53,22 @@ struct ClaudeMonitorApp {
                 exit(0)
             }
 
-            // [Mode 2: Notifier]
+            // [Mode 2: Notifier] (v2 format with subtitle)
             // Called by Python Hook after Claude finishes.
-            // Args: notify <title> <message> [sound] [bundle_id] [pid] [cgWindowID]
+            // Args: notify <title> <message> <subtitle> <sound> <category> <bundle_id> <pid> <cgWindowID>
             else if mode == "notify" {
                 guard args.count > 3 else { exit(1) }
                 let title = args[2]
                 let message = args[3]
-                let soundName = args.count > 4 ? args[4] : "Crystal"
-                let targetBundle = args.count > 5 ? args[5] : "com.apple.Terminal"
-                let targetPID: Int32 = args.count > 6 ? Int32(args[6]) ?? 0 : 0
-                let cgWindowID: UInt32 = args.count > 7 ? UInt32(args[7]) ?? 0 : 0
+                let subtitle = args.count > 4 ? args[4] : ""
+                let soundName = args.count > 5 ? args[5] : "Glass"
+                let category = args.count > 6 ? args[6] : "TASK_STATUS"
+                let targetBundle = args.count > 7 ? args[7] : "com.apple.Terminal"
+                let targetPID: Int32 = args.count > 8 ? Int32(args[8]) ?? 0 : 0
+                let cgWindowID: UInt32 = args.count > 9 ? UInt32(args[9]) ?? 0 : 0
 
-                log("SEND: Title='\(title)' Target='\(targetBundle)' PID=\(targetPID) CGWindowID=\(cgWindowID)")
+                log("SEND: Title='\(title)' Subtitle='\(subtitle)' Category='\(category)'")
+                log("SEND: Target='\(targetBundle)' PID=\(targetPID) CGWindowID=\(cgWindowID)")
 
                 let center = UNUserNotificationCenter.current()
                 let sema = DispatchSemaphore(value: 0)
@@ -78,12 +81,13 @@ struct ClaudeMonitorApp {
 
                 let content = UNMutableNotificationContent()
                 content.title = title
+                content.subtitle = subtitle  // v2: Add subtitle support
                 content.body = message
 
-                // Set category for action buttons
-                content.categoryIdentifier = "TASK_STATUS"
+                // Set category for action buttons (from Python)
+                content.categoryIdentifier = category
 
-                // Set sound with validation (soundName is defined above)
+                // Set sound with validation
                 if !soundName.isEmpty {
                     content.sound = UNNotificationSound(named: UNNotificationSoundName(soundName))
                 }
@@ -91,8 +95,7 @@ struct ClaudeMonitorApp {
                 // Log sound setting
                 log("SOUND: Using sound '\(soundName.isEmpty ? "system default" : soundName)'")
 
-                // Set app icon for notifications
-                let appBundleURL = Bundle.main.bundleURL
+                // Set userInfo for window activation
                 content.userInfo = [
                     "targetBundle": targetBundle,
                     "targetPID": targetPID,
