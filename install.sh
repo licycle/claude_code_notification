@@ -35,6 +35,10 @@ if [ "$1" = "--hooks-only" ] || [ "$1" = "-p" ]; then
         exit 1
     fi
 
+    # Delete old database and reinitialize (schema may have changed)
+    cecho "${YELLOW}Resetting database...${NC}"
+    rm -f "$HOME/.claude-task-tracker/tasks.db"
+
     # Update hook scripts
     cecho "${YELLOW}Updating hook scripts...${NC}"
     cp "$TRACKER_SRC/hooks/utils.py" "$TRACKER_DIR/hooks/"
@@ -50,11 +54,22 @@ if [ "$1" = "--hooks-only" ] || [ "$1" = "-p" ]; then
     # Update service modules
     cecho "${YELLOW}Updating service modules...${NC}"
     cp "$TRACKER_SRC/services/database.py" "$TRACKER_DIR/services/"
+    cp "$TRACKER_SRC/services/db_timeline.py" "$TRACKER_DIR/services/"
+    cp "$TRACKER_SRC/services/db_pending.py" "$TRACKER_DIR/services/"
     cp "$TRACKER_SRC/services/summary_service.py" "$TRACKER_DIR/services/"
     cp "$TRACKER_SRC/services/notification.py" "$TRACKER_DIR/services/"
     cp "$TRACKER_SRC/services/notification_formatter.py" "$TRACKER_DIR/services/"
     cp "$TRACKER_SRC/services/__init__.py" "$TRACKER_DIR/services/" 2>/dev/null || true
     cp "$TRACKER_SRC/__init__.py" "$TRACKER_DIR/" 2>/dev/null || true
+
+    # Reinitialize database with new schema
+    cecho "${YELLOW}Initializing database...${NC}"
+    python3 -c "
+import sys
+sys.path.insert(0, '$TRACKER_DIR')
+from services.database import init_database
+init_database()
+" 2>/dev/null && cecho "${GREEN}✅ Database initialized${NC}" || cecho "${YELLOW}⚠️ Database init skipped${NC}"
 
     # Update shell wrapper function in config.sh
     cecho "${YELLOW}Updating shell wrapper...${NC}"
@@ -131,6 +146,7 @@ _claude_wrapper() {
 
         export CLAUDE_TERM_BUNDLE_ID="${detected_bundle:-com.apple.Terminal}"
         export CLAUDE_TERM_PID="${detected_pid:-0}"
+        export CLAUDE_SHELL_PID="$$"
         export CLAUDE_CG_WINDOW_ID="${detected_window_id:-0}"
         export CLAUDE_CONFIG_DIR="$config_path"
         export CLAUDE_ACCOUNT_ALIAS="$account_alias"
@@ -192,7 +208,13 @@ if [ "$1" = "--app-only" ] || [ "$1" = "-a" ]; then
     swiftc \
         "$SWIFT_DIR/Utils/Logger.swift" \
         "$SWIFT_DIR/Utils/PermissionManager.swift" \
+        "$SWIFT_DIR/Services/DatabaseModels.swift" \
         "$SWIFT_DIR/Services/DatabaseManager.swift" \
+        "$SWIFT_DIR/Services/DatabaseManager+Timeline.swift" \
+        "$SWIFT_DIR/Services/SettingsManager.swift" \
+        "$SWIFT_DIR/UI/SessionCardView.swift" \
+        "$SWIFT_DIR/UI/SessionListView.swift" \
+        "$SWIFT_DIR/UI/SessionDetailView.swift" \
         "$SWIFT_DIR/UI/StatusBarController.swift" \
         "$SWIFT_DIR/Core/AppDelegate.swift" \
         "$SWIFT_DIR/UI/SettingsWindow.swift" \
@@ -338,7 +360,7 @@ cecho "${YELLOW}[1/7] Compiling Swift Core...${NC}"
 mkdir -p "$INSTALL_DIR/Contents/MacOS"
 
 SWIFT_DIR="$SCRIPT_DIR/swift"
-SWIFT_FILES="Utils/Logger.swift Utils/PermissionManager.swift Services/DatabaseManager.swift UI/StatusBarController.swift Core/AppDelegate.swift UI/SettingsWindow.swift Core/Main.swift"
+SWIFT_FILES="Utils/Logger.swift Utils/PermissionManager.swift Services/DatabaseModels.swift Services/DatabaseManager.swift Services/DatabaseManager+Timeline.swift Services/SettingsManager.swift UI/SessionCardView.swift UI/SessionListView.swift UI/SessionDetailView.swift UI/StatusBarController.swift Core/AppDelegate.swift UI/SettingsWindow.swift Core/Main.swift"
 
 for swiftfile in $SWIFT_FILES; do
     if [ ! -f "$SWIFT_DIR/$swiftfile" ]; then
@@ -350,7 +372,13 @@ done
 swiftc \
     "$SWIFT_DIR/Utils/Logger.swift" \
     "$SWIFT_DIR/Utils/PermissionManager.swift" \
+    "$SWIFT_DIR/Services/DatabaseModels.swift" \
     "$SWIFT_DIR/Services/DatabaseManager.swift" \
+    "$SWIFT_DIR/Services/DatabaseManager+Timeline.swift" \
+    "$SWIFT_DIR/Services/SettingsManager.swift" \
+    "$SWIFT_DIR/UI/SessionCardView.swift" \
+    "$SWIFT_DIR/UI/SessionListView.swift" \
+    "$SWIFT_DIR/UI/SessionDetailView.swift" \
     "$SWIFT_DIR/UI/StatusBarController.swift" \
     "$SWIFT_DIR/Core/AppDelegate.swift" \
     "$SWIFT_DIR/UI/SettingsWindow.swift" \
@@ -485,6 +513,8 @@ else
         cp "$TRACKER_SRC/__init__.py" "$TRACKER_DIR/"
         cp "$TRACKER_SRC/services/__init__.py" "$TRACKER_DIR/services/"
         cp "$TRACKER_SRC/services/database.py" "$TRACKER_DIR/services/"
+        cp "$TRACKER_SRC/services/db_timeline.py" "$TRACKER_DIR/services/"
+        cp "$TRACKER_SRC/services/db_pending.py" "$TRACKER_DIR/services/"
         cp "$TRACKER_SRC/services/summary_service.py" "$TRACKER_DIR/services/"
         cp "$TRACKER_SRC/services/notification.py" "$TRACKER_DIR/services/"
         cp "$TRACKER_SRC/services/notification_formatter.py" "$TRACKER_DIR/services/"
@@ -633,6 +663,7 @@ _claude_wrapper() {
 
         export CLAUDE_TERM_BUNDLE_ID="\${detected_bundle:-com.apple.Terminal}"
         export CLAUDE_TERM_PID="\${detected_pid:-0}"
+        export CLAUDE_SHELL_PID="\$\$"
         export CLAUDE_CG_WINDOW_ID="\${detected_window_id:-0}"
         export CLAUDE_CONFIG_DIR="\$config_path"
         export CLAUDE_ACCOUNT_ALIAS="\$account_alias"

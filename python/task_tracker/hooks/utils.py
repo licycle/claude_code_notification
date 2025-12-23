@@ -58,6 +58,7 @@ def get_env_info() -> Dict[str, str]:
     return {
         'bundle_id': os.environ.get('CLAUDE_TERM_BUNDLE_ID', 'com.apple.Terminal'),
         'pid': os.environ.get('CLAUDE_TERM_PID', '0'),
+        'shell_pid': os.environ.get('CLAUDE_SHELL_PID', '0'),
         'window_id': os.environ.get('CLAUDE_CG_WINDOW_ID', '0'),
         'account_alias': get_account_alias(),
         'config_dir': os.environ.get('CLAUDE_CONFIG_DIR', '')

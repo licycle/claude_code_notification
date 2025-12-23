@@ -75,7 +75,9 @@ Claude Monitor 是一个 macOS 原生应用，为 Claude Code 提供桌面通知
 │       │   ├── notification_tracker.py # Notification
 │       │   └── snapshot_hook.py      # Stop
 │       └── services/         # 服务模块
-│           ├── database.py           # SQLite 状态存储
+│           ├── database.py           # SQLite 核心操作 + 重导出
+│           ├── db_timeline.py        # 时间线和摘要操作
+│           ├── db_pending.py         # Pending 会话和生命周期
 │           ├── summary_service.py    # AI 总结服务
 │           ├── notification.py       # 通知发送
 │           └── notification_formatter.py # 通知格式化
@@ -85,10 +87,16 @@ Claude Monitor 是一个 macOS 原生应用，为 Claude Code 提供桌面通知
     │   ├── AppDelegate.swift         # 应用代理
     │   └── Main.swift                # 入口点
     ├── UI/                   # 用户界面
-    │   ├── StatusBarController.swift # 状态栏控制器
+    │   ├── StatusBarController.swift # 状态栏主控制器
+    │   ├── SessionListView.swift     # 会话列表视图
+    │   ├── SessionCardView.swift     # 会话卡片视图
+    │   ├── SessionDetailView.swift   # 会话详情视图
     │   └── SettingsWindow.swift      # 设置窗口
     ├── Services/             # 服务层
-    │   └── DatabaseManager.swift     # 数据库管理
+    │   ├── DatabaseModels.swift      # 数据模型定义
+    │   ├── DatabaseManager.swift     # 数据库核心查询
+    │   ├── DatabaseManager+Timeline.swift # 时间线和清理
+    │   └── SettingsManager.swift     # 配置管理
     └── Utils/                # 工具类
         ├── Logger.swift              # 日志工具
         └── PermissionManager.swift   # 权限管理

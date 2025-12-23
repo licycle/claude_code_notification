@@ -34,6 +34,7 @@ def main():
     # Extract window info
     bundle_id = env_info.get('bundle_id')
     terminal_pid = int(env_info.get('pid', 0)) or None
+    shell_pid = int(env_info.get('shell_pid', 0)) or None
     window_id = int(env_info.get('window_id', 0)) or None
     account_alias = env_info.get('account_alias', 'default')
 
@@ -44,6 +45,7 @@ def main():
         account_alias=account_alias,
         bundle_id=bundle_id,
         terminal_pid=terminal_pid,
+        shell_pid=shell_pid,
         window_id=window_id
     )
 

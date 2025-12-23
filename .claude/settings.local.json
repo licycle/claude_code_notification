@@ -58,7 +58,20 @@
       "Bash(swift/UI/StatusBarController.swift )",
       "Bash(swift/Core/AppDelegate.swift )",
       "Bash(swift/UI/SettingsWindow.swift )",
-      "Bash(swift/Core/Main.swift )"
+      "Bash(swift/Core/Main.swift )",
+      "Bash(while read pid)",
+      "Bash(do if kill -0 $pid)",
+      "Bash(then echo 'PID $pid: ALIVE')",
+      "Bash(else echo 'PID $pid: DEAD')",
+      "Bash(fi)",
+      "Bash(done)",
+      "Bash(ps:*)",
+      "Bash(swift/Services/DatabaseModels.swift )",
+      "Bash(swift/Services/DatabaseManager+Timeline.swift )",
+      "Bash(swift/Services/SettingsManager.swift )",
+      "Bash(swift/UI/SessionCardView.swift )",
+      "Bash(swift/UI/SessionListView.swift )",
+      "Bash(swift/UI/SessionDetailView.swift )"
     ]
   }
 }
