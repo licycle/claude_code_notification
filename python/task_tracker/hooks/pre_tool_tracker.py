@@ -37,14 +37,10 @@ def main():
         write_hook_output()
         return
 
-    # Update session status to executing_tool
-    # Only update if current status is 'working' to avoid overwriting more specific states
+    # Note: No longer updating status to executing_tool
+    # Status updates are handled by progress_tracker.py when resuming from blocking states
     current_status = session.get('current_status', '')
-    if current_status in ('working', 'executing_tool'):
-        update_session_status(session_id, 'executing_tool')
-        log("PRETOOL", f"Status updated to executing_tool (was: {current_status})")
-    else:
-        log("PRETOOL", f"Status not updated, current: {current_status}")
+    log("PRETOOL", f"Tool: {tool_name}, current status: {current_status} (no update)")
 
     # Note: No timeline event recorded to avoid excessive data
 

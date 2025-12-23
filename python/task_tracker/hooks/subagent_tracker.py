@@ -54,7 +54,7 @@ def handle_start(input_data: dict):
         'reason': delegation_reason[:200] if delegation_reason else ''
     }
     add_timeline_event(
-        session_pk=session_pk,
+        session_id=session_id,
         event_type='subagent_start',
         content=agent_name,
         metadata=metadata
@@ -97,7 +97,7 @@ def handle_stop(input_data: dict):
         'agent_id': agent_id
     }
     add_timeline_event(
-        session_pk=session_pk,
+        session_id=session_id,
         event_type='subagent_stop',
         content=agent_name,
         metadata=metadata

@@ -55,7 +55,7 @@ def main():
         'decision': permission_decision
     }
     add_timeline_event(
-        session_pk=session_pk,
+        session_id=session_id,
         event_type='permission_request',
         content=tool_name,
         metadata=metadata

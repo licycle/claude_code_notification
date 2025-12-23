@@ -46,6 +46,20 @@ def main():
 
     project_name = get_project_name(session.get('project', cwd))
 
+    # Fix: These statuses should resume to 'working' when a tool executes
+    # Tool execution means the blocking condition has been resolved
+    SHOULD_RESUME_WORKING = {
+        'waiting_permission',   # Permission granted
+        'waiting_for_user',     # User answered question
+        'idle',                 # Resumed from idle
+        'rate_limited',         # Rate limit ended
+    }
+
+    current_status = session.get('current_status', '')
+    if current_status in SHOULD_RESUME_WORKING:
+        log("PROGRESS", f"Status '{current_status}' -> 'working' (tool executed)")
+        update_session_status(session_id, 'working')
+
     # Handle TodoWrite
     if tool_name == 'TodoWrite':
         handle_todo_write(session_id, tool_input, project_name)
