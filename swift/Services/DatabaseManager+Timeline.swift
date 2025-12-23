@@ -1,6 +1,9 @@
 import Foundation
 import SQLite3
 
+// SQLite destructor type for transient strings (also defined in DatabaseManager.swift)
+private let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+
 // MARK: - Timeline & Summary Extension
 
 extension DatabaseManager {
@@ -40,7 +43,7 @@ extension DatabaseManager {
 
         var statement: OpaquePointer?
         if sqlite3_prepare_v2(db, query, -1, &statement, nil) == SQLITE_OK {
-            sqlite3_bind_text(statement, 1, bindValue, -1, nil)
+            sqlite3_bind_text(statement, 1, bindValue, -1, SQLITE_TRANSIENT)
 
             var lastEventTime: Date?
             var consecutiveProgress = 0
@@ -65,9 +68,9 @@ extension DatabaseManager {
                     continue
                 }
 
-                // Skip if too close to last event (< 30 seconds) for status_change
+                // Skip if too close to last event (< 10 seconds) for status_change
                 if let lastTime = lastEventTime, eventType == "status_change" {
-                    if eventTime.timeIntervalSince(lastTime) < 30 {
+                    if eventTime.timeIntervalSince(lastTime) < 10 {
                         continue
                     }
                 }
@@ -94,6 +97,22 @@ extension DatabaseManager {
 
                     let timeStr = formatTime(eventTime)
                     switch content {
+                    case "idle":
+                        node = TimelineNode(
+                            time: timeStr,
+                            type: "idle",
+                            title: "空闲",
+                            description: "等待新任务",
+                            status: "completed"
+                        )
+                    case "working":
+                        node = TimelineNode(
+                            time: timeStr,
+                            type: "working",
+                            title: "工作中",
+                            description: "正在执行任务",
+                            status: "completed"
+                        )
                     case "waiting_for_user":
                         node = TimelineNode(
                             time: timeStr,
@@ -118,6 +137,14 @@ extension DatabaseManager {
                             description: "已完成全部步骤",
                             status: "completed"
                         )
+                    case "rate_limited":
+                        node = TimelineNode(
+                            time: timeStr,
+                            type: "rate_limited",
+                            title: "限流",
+                            description: "API 请求受限",
+                            status: "current"
+                        )
                     default:
                         break
                     }
@@ -125,36 +152,19 @@ extension DatabaseManager {
                 case "progress_update":
                     let completed = metadata["completed"] as? Int ?? 0
                     let total = metadata["total"] as? Int ?? 0
+                    let timeStr = formatTime(eventTime)
 
+                    // 每次进度更新都显示
                     if completed > lastCompletedCount {
-                        consecutiveProgress += (completed - lastCompletedCount)
+                        node = TimelineNode(
+                            time: timeStr,
+                            type: "progress",
+                            title: "进度更新",
+                            description: "已完成 \(completed)/\(total) 项",
+                            status: completed == total && total > 0 ? "completed" : "current"
+                        )
                     }
                     lastCompletedCount = completed
-
-                    // Create milestone for 3+ consecutive completions
-                    if consecutiveProgress >= 3 {
-                        let timeStr = formatTime(eventTime)
-                        node = TimelineNode(
-                            time: timeStr,
-                            type: "milestone",
-                            title: "阶段完成",
-                            description: "已完成 \(completed)/\(total) 项",
-                            status: "completed"
-                        )
-                        consecutiveProgress = 0
-                    }
-
-                    // All todos completed
-                    if completed == total && total > 0 {
-                        let timeStr = formatTime(eventTime)
-                        node = TimelineNode(
-                            time: timeStr,
-                            type: "complete",
-                            title: "全部完成",
-                            description: "已完成全部 \(total) 项任务",
-                            status: "completed"
-                        )
-                    }
 
                 case "user_input":
                     let timeStr = formatTime(eventTime)
@@ -249,7 +259,7 @@ extension DatabaseManager {
         var result: SessionInfo?
 
         if sqlite3_prepare_v2(db, query, -1, &statement, nil) == SQLITE_OK {
-            sqlite3_bind_text(statement, 1, bindValue, -1, nil)
+            sqlite3_bind_text(statement, 1, bindValue, -1, SQLITE_TRANSIENT)
 
             if sqlite3_step(statement) == SQLITE_ROW {
                 let pk = Int(sqlite3_column_int(statement, 0))
@@ -323,7 +333,7 @@ extension DatabaseManager {
         var count = 0
 
         if sqlite3_prepare_v2(db, query, -1, &statement, nil) == SQLITE_OK {
-            sqlite3_bind_text(statement, 1, bindValue, -1, nil)
+            sqlite3_bind_text(statement, 1, bindValue, -1, SQLITE_TRANSIENT)
 
             if sqlite3_step(statement) == SQLITE_ROW {
                 count = Int(sqlite3_column_int(statement, 0))

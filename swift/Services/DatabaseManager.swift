@@ -1,6 +1,9 @@
 import Foundation
 import SQLite3
 
+// SQLite destructor type for transient strings
+private let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+
 // MARK: - Database Manager
 
 class DatabaseManager {
@@ -201,7 +204,7 @@ class DatabaseManager {
         var result: ProgressInfo?
 
         if sqlite3_prepare_v2(db, query, -1, &statement, nil) == SQLITE_OK {
-            sqlite3_bind_text(statement, 1, bindValue, -1, nil)
+            sqlite3_bind_text(statement, 1, bindValue, -1, SQLITE_TRANSIENT)
 
             if sqlite3_step(statement) == SQLITE_ROW {
                 let completed = Int(sqlite3_column_int(statement, 1))
@@ -256,7 +259,7 @@ class DatabaseManager {
         var result: String?
 
         if sqlite3_prepare_v2(db, query, -1, &statement, nil) == SQLITE_OK {
-            sqlite3_bind_text(statement, 1, bindValue, -1, nil)
+            sqlite3_bind_text(statement, 1, bindValue, -1, SQLITE_TRANSIENT)
 
             if sqlite3_step(statement) == SQLITE_ROW {
                 if let questionPtr = sqlite3_column_text(statement, 0) {
