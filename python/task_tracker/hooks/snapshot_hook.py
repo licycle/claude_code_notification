@@ -22,6 +22,7 @@ from services.database import (
     get_session, update_session_status, save_snapshot,
     get_progress, get_pending_decisions
 )
+from services.db_timeline import add_timeline_event
 from services.summary_service import get_summary_service
 from services.notification import (
     notify_task_idle, notify_decision_needed, send_rich_notification
@@ -210,6 +211,28 @@ def main():
 
     # Save snapshot to database
     save_snapshot(session_id, last_user, last_assistant, summary)
+
+    # Insert AI summary as timeline event (only in AI mode)
+    if summary and summary.get('mode') == 'ai':
+        # Format summary content for timeline display (brief version)
+        current_task = summary.get('current_task', 'AI 分析完成')
+
+        # Build metadata with full AI summary data
+        summary_metadata = {
+            'current_task': summary.get('current_task'),
+            'progress_summary': summary.get('progress_summary'),
+            'next_step': summary.get('next_step'),
+            'pending_decision': summary.get('pending_decision')
+        }
+
+        # Insert timeline event
+        add_timeline_event(
+            session_id=session_id,
+            event_type='ai_summary',
+            content=current_task,
+            metadata=summary_metadata
+        )
+        log("SNAPSHOT", f"AI summary timeline event inserted: {current_task[:50]}")
 
     # Check for rate limit FIRST (before other notifications)
     has_rate_limit, rate_limit_keyword = detect_rate_limit(transcript_path)

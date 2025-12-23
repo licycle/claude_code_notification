@@ -176,6 +176,18 @@ extension DatabaseManager {
                         status: "completed"
                     )
 
+                case "ai_summary":
+                    let timeStr = formatTime(eventTime)
+                    // Use current_task from metadata (if available) or content as fallback
+                    let currentTask = metadata["current_task"] as? String ?? content
+                    node = TimelineNode(
+                        time: timeStr,
+                        type: "ai_summary",
+                        title: "AI 总结",
+                        description: currentTask.isEmpty ? "AI 分析" : currentTask,
+                        status: "completed"
+                    )
+
                 default:
                     break
                 }

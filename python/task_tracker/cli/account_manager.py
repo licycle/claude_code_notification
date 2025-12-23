@@ -43,7 +43,7 @@ def update_shell_config(accounts):
             new_lines.append(line)
             # Add all account aliases
             for alias, path in accounts.items():
-                new_lines.append(f"alias {alias}='_claude_wrapper \"{path}\"'\n")
+                new_lines.append(f"alias {alias}='_claude_wrapper \"{alias}\" \"{path}\"'\n")
             continue
 
         if in_alias_section:
@@ -59,7 +59,7 @@ def update_shell_config(accounts):
     if not alias_section_found:
         new_lines.append("\n# --- User Aliases ---\n")
         for alias, path in accounts.items():
-            new_lines.append(f"alias {alias}='_claude_wrapper \"{path}\"'\n")
+            new_lines.append(f"alias {alias}='_claude_wrapper \"{alias}\" \"{path}\"'\n")
 
     with open(SHELL_CONFIG, 'w') as f:
         f.writelines(new_lines)

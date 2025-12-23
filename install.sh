@@ -215,6 +215,7 @@ if [ "$1" = "--app-only" ] || [ "$1" = "-a" ]; then
         "$SWIFT_DIR/Services/DatabaseManager.swift" \
         "$SWIFT_DIR/Services/DatabaseManager+Timeline.swift" \
         "$SWIFT_DIR/Services/SettingsManager.swift" \
+        "$SWIFT_DIR/UI/TimelineNodeDetailPopover.swift" \
         "$SWIFT_DIR/UI/SessionCardView.swift" \
         "$SWIFT_DIR/UI/SessionListView.swift" \
         "$SWIFT_DIR/UI/SessionDetailView.swift" \
@@ -401,6 +402,7 @@ swiftc \
     "$SWIFT_DIR/Services/DatabaseManager.swift" \
     "$SWIFT_DIR/Services/DatabaseManager+Timeline.swift" \
     "$SWIFT_DIR/Services/SettingsManager.swift" \
+    "$SWIFT_DIR/UI/TimelineNodeDetailPopover.swift" \
     "$SWIFT_DIR/UI/SessionCardView.swift" \
     "$SWIFT_DIR/UI/SessionListView.swift" \
     "$SWIFT_DIR/UI/SessionDetailView.swift" \

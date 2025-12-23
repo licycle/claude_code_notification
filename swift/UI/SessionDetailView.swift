@@ -1,5 +1,52 @@
 import AppKit
 
+// MARK: - Timeline Node View with Mouse Tracking
+// 支持鼠标追踪的时间线节点视图
+// 当鼠标悬停 0.5 秒后触发 hover 回调
+
+class TimelineNodeView: NSView {
+    var onHover: ((Bool) -> Void)?
+    private var trackingArea: NSTrackingArea?
+    private var hoverTimer: Timer?
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+
+        // 移除现有的追踪区域
+        if let existing = trackingArea {
+            removeTrackingArea(existing)
+        }
+
+        // 创建新的追踪区域
+        trackingArea = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeInKeyWindow],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(trackingArea!)
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        // 延迟 0.5 秒显示 popover
+        hoverTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false) { [weak self] _ in
+            self?.onHover?(true)
+        }
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        // 取消定时器并立即隐藏
+        hoverTimer?.invalidate()
+        hoverTimer = nil
+        onHover?(false)
+    }
+
+    deinit {
+        // 清理定时器
+        hoverTimer?.invalidate()
+    }
+}
+
 // MARK: - Session Detail View Controller Delegate
 // 会话详情视图控制器代理协议
 // 用于处理返回和跳转终端的回调
@@ -32,6 +79,9 @@ class SessionDetailViewController: NSViewController {
 
     /// 会话模式（ai/raw）
     private var summaryMode: String?
+
+    /// 当前显示的 popover（用于显示节点详情）
+    private var currentPopover: NSPopover?
 
     // MARK: - Initialization
 
@@ -258,9 +308,27 @@ class SessionDetailViewController: NSViewController {
         return section
     }
 
+    /// 显示节点详情 popover
+    private func showNodeDetail(relativeTo view: NSView, title: String, description: String) {
+        // 关闭现有 popover
+        currentPopover?.close()
+
+        let popover = NSPopover()
+        popover.contentViewController = TimelineNodeDetailPopover(title: title, description: description)
+        popover.behavior = .semitransient  // 移开鼠标时自动关闭
+        popover.show(relativeTo: view.bounds, of: view, preferredEdge: .maxX)
+        currentPopover = popover
+    }
+
+    /// 隐藏节点详情 popover
+    private func hideNodeDetail() {
+        currentPopover?.close()
+        currentPopover = nil
+    }
+
     /// 创建单个时间线节点视图
     private func createTimelineNode(node: TimelineNode) -> NSView {
-        let nodeView = NSView(frame: NSRect(x: 0, y: 0, width: 320, height: 42))
+        let nodeView = TimelineNodeView(frame: NSRect(x: 0, y: 0, width: 320, height: 42))
 
         // 状态指示图标
         let statusEmoji = getTimelineEmoji(type: node.type, status: node.status)
@@ -281,7 +349,6 @@ class SessionDetailViewController: NSViewController {
         titleLabel.font = NSFont.systemFont(ofSize: 12, weight: .medium)
         titleLabel.lineBreakMode = .byTruncatingTail
         titleLabel.frame = NSRect(x: 75, y: 22, width: 240, height: 16)
-        titleLabel.toolTip = node.title
         nodeView.addSubview(titleLabel)
 
         // 节点描述
@@ -290,7 +357,6 @@ class SessionDetailViewController: NSViewController {
         descLabel.textColor = .secondaryLabelColor
         descLabel.lineBreakMode = .byTruncatingTail
         descLabel.frame = NSRect(x: 75, y: 5, width: 240, height: 16)
-        descLabel.toolTip = node.description
         nodeView.addSubview(descLabel)
 
         // 垂直连接线
@@ -298,6 +364,23 @@ class SessionDetailViewController: NSViewController {
         line.wantsLayer = true
         line.layer?.backgroundColor = NSColor.separatorColor.cgColor
         nodeView.addSubview(line)
+
+        // 设置 hover 回调
+        nodeView.onHover = { [weak self, weak nodeView] isHovering in
+            guard let self = self, let nodeView = nodeView else { return }
+
+            if isHovering {
+                // 显示 popover
+                self.showNodeDetail(
+                    relativeTo: nodeView,
+                    title: node.title,
+                    description: node.description
+                )
+            } else {
+                // 隐藏 popover
+                self.hideNodeDetail()
+            }
+        }
 
         return nodeView
     }
@@ -329,6 +412,8 @@ class SessionDetailViewController: NSViewController {
             return "⚠️"
         case "progress":
             return "📝"
+        case "ai_summary":
+            return "🤖"
         case "subagent_start", "subagent_working":
             return "🤖"
         case "subagent_stop":
