@@ -73,10 +73,8 @@ class StatusBarController: NSObject {
         cleanupTimer = Timer.scheduledTimer(withTimeInterval: 300.0, repeats: true) { [weak self] _ in
             self?.cleanupDeadSessions()
         }
-        // Also run once at startup (delayed by 10 seconds to let things settle)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
-            self?.cleanupDeadSessions()
-        }
+        // Run immediately at startup to recover/cleanup sessions
+        cleanupDeadSessions()
     }
 
     private func cleanupDeadSessions() {

@@ -112,7 +112,7 @@ class SessionCardView: NSView {
             return "🔴"
         case "idle":
             return "🟡"
-        case "working":
+        case "working", "executing_tool", "subagent_working":
             return "🟢"
         case "completed":
             return "✅"
@@ -131,6 +131,10 @@ class SessionCardView: NSView {
             return "💤 空闲中"
         case "working":
             return "🔄 运行中"
+        case "executing_tool":
+            return "🔧 执行工具"
+        case "subagent_working":
+            return "🤖 子代理"
         case "completed":
             return "✅ 已完成"
         default:
@@ -144,7 +148,7 @@ class SessionCardView: NSView {
             return .systemOrange
         case "idle":
             return .systemYellow
-        case "working":
+        case "working", "executing_tool", "subagent_working":
             return .systemGreen
         case "completed":
             return .systemGray

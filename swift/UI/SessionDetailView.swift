@@ -310,8 +310,8 @@ class SessionDetailViewController: NSViewController {
             return "◆"
         case "waiting":
             return "◐"
-        case "permission":
-            return "◐"
+        case "permission", "permission_request":
+            return "🔐"
         case "complete":
             return "✓"
         case "input":
@@ -324,6 +324,10 @@ class SessionDetailViewController: NSViewController {
             return "⚠️"
         case "progress":
             return "📝"
+        case "subagent_start", "subagent_working":
+            return "🤖"
+        case "subagent_stop":
+            return "✅"
         default:
             return "○"
         }

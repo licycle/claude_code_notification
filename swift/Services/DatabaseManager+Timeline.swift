@@ -360,7 +360,7 @@ extension DatabaseManager {
                 needsDecision += 1
             case "idle":
                 idle += 1
-            case "working":
+            case "working", "executing_tool", "subagent_working":
                 working += 1
             default:
                 break

@@ -48,6 +48,9 @@ if [ "$1" = "--hooks-only" ] || [ "$1" = "-p" ]; then
     cp "$TRACKER_SRC/hooks/snapshot_hook.py" "$TRACKER_DIR/hooks/"
     cp "$TRACKER_SRC/hooks/session_cleanup.py" "$TRACKER_DIR/hooks/"
     cp "$TRACKER_SRC/hooks/session_init.py" "$TRACKER_DIR/hooks/"
+    cp "$TRACKER_SRC/hooks/permission_tracker.py" "$TRACKER_DIR/hooks/"
+    cp "$TRACKER_SRC/hooks/pre_tool_tracker.py" "$TRACKER_DIR/hooks/"
+    cp "$TRACKER_SRC/hooks/subagent_tracker.py" "$TRACKER_DIR/hooks/"
     cp "$TRACKER_SRC/hooks/__init__.py" "$TRACKER_DIR/hooks/" 2>/dev/null || true
     chmod +x "$TRACKER_DIR/hooks/"*.py
 
@@ -504,6 +507,9 @@ else
         cp "$TRACKER_SRC/hooks/snapshot_hook.py" "$TRACKER_DIR/hooks/"
         cp "$TRACKER_SRC/hooks/session_cleanup.py" "$TRACKER_DIR/hooks/"
         cp "$TRACKER_SRC/hooks/session_init.py" "$TRACKER_DIR/hooks/"
+        cp "$TRACKER_SRC/hooks/permission_tracker.py" "$TRACKER_DIR/hooks/"
+        cp "$TRACKER_SRC/hooks/pre_tool_tracker.py" "$TRACKER_DIR/hooks/"
+        cp "$TRACKER_SRC/hooks/subagent_tracker.py" "$TRACKER_DIR/hooks/"
         cp "$TRACKER_SRC/hooks/__init__.py" "$TRACKER_DIR/hooks/" 2>/dev/null || touch "$TRACKER_DIR/hooks/__init__.py"
 
         # Make hooks executable

@@ -12,6 +12,54 @@
       }
     ],
 
+    "PermissionRequest": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.claude-task-tracker/hooks/permission_tracker.py",
+            "timeout": 2
+          }
+        ]
+      }
+    ],
+
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.claude-task-tracker/hooks/pre_tool_tracker.py",
+            "timeout": 2
+          }
+        ]
+      }
+    ],
+
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.claude-task-tracker/hooks/subagent_tracker.py start",
+            "timeout": 2
+          }
+        ]
+      }
+    ],
+
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.claude-task-tracker/hooks/subagent_tracker.py stop",
+            "timeout": 2
+          }
+        ]
+      }
+    ],
+
     "PostToolUse": [
       {
         "matcher": "TodoWrite|AskUserQuestion",
