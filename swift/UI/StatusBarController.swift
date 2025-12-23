@@ -273,12 +273,17 @@ class SessionListViewController: NSViewController {
 
         let clearButton = NSButton(title: "清除已完成", target: self, action: #selector(clearCompleted))
         clearButton.bezelStyle = .rounded
-        clearButton.frame = NSRect(x: 20, y: 10, width: 100, height: 30)
+        clearButton.frame = NSRect(x: 12, y: 10, width: 90, height: 30)
         footer.addSubview(clearButton)
+
+        let forceCleanupButton = NSButton(title: "强制清理", target: self, action: #selector(forceCleanup))
+        forceCleanupButton.bezelStyle = .rounded
+        forceCleanupButton.frame = NSRect(x: 110, y: 10, width: 80, height: 30)
+        footer.addSubview(forceCleanupButton)
 
         let refreshButton = NSButton(title: "刷新", target: self, action: #selector(refreshTapped))
         refreshButton.bezelStyle = .rounded
-        refreshButton.frame = NSRect(x: 240, y: 10, width: 100, height: 30)
+        refreshButton.frame = NSRect(x: 260, y: 10, width: 80, height: 30)
         footer.addSubview(refreshButton)
 
         return footer
@@ -293,6 +298,13 @@ class SessionListViewController: NSViewController {
     @objc func clearCompleted() {
         // TODO: Implement clear completed sessions
         log("STATUSBAR: Clear completed requested")
+    }
+
+    @objc func forceCleanup() {
+        log("STATUSBAR: Force cleanup requested")
+        let count = DatabaseManager.shared.cleanupDeadSessions()
+        log("STATUSBAR: Force cleanup completed, cleaned \(count) sessions")
+        refresh()
     }
 
     @objc func refreshTapped() {

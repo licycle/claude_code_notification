@@ -169,8 +169,17 @@ fi
 if [ "$1" = "--app-only" ] || [ "$1" = "-a" ]; then
     cecho "${BLUE}=== Quick App Rebuild ===${NC}"
 
-    # Kill existing app
-    pkill -f "$APP_NAME" 2>/dev/null || true
+    # Kill existing app (more reliable)
+    cecho "${YELLOW}Stopping existing processes...${NC}"
+    pkill -9 -f "$APP_NAME" 2>/dev/null || true
+    sleep 1  # Wait for process to fully exit
+
+    # Verify process stopped
+    if pgrep -f "$APP_NAME" >/dev/null 2>&1; then
+        cecho "${YELLOW}Process still running, retrying...${NC}"
+        pkill -9 -f "$APP_NAME" 2>/dev/null || true
+        sleep 1
+    fi
 
     # Remove old binary
     rm -rf "$INSTALL_DIR"
@@ -221,12 +230,21 @@ EOF
 
     # Sign and register
     codesign --force --deep --sign - "$INSTALL_DIR"
+    cecho "${YELLOW}Registering with Notification Center...${NC}"
     open "$INSTALL_DIR"
-    sleep 0.3
+    sleep 1.5  # Wait for registration to complete
     pkill -f "$APP_NAME" 2>/dev/null || true
+    sleep 0.5  # Ensure process exits
 
-    cecho "${GREEN}✅ App rebuilt and installed${NC}"
-    cecho "   Test: ${GREEN}$BINARY_PATH gui${NC}"
+    # Verify installation
+    if [ -x "$BINARY_PATH" ]; then
+        cecho "${GREEN}✅ App rebuilt and installed${NC}"
+        cecho "   Binary: ${GREEN}$BINARY_PATH${NC}"
+        cecho "   Test:   ${GREEN}$BINARY_PATH gui${NC}"
+    else
+        cecho "${RED}❌ Installation failed - binary not found${NC}"
+        exit 1
+    fi
     exit 0
 fi
 
