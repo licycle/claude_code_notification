@@ -45,31 +45,18 @@ def main():
     pending_id = os.environ.get('CLAUDE_PENDING_SESSION_ID', '')
     if pending_id:
         log("GOAL", f"Found pending_id: {pending_id[:8]}..., attempting to link")
-        linked = link_pending_session(pending_id, session_id, cwd)
-        if linked:
-            log("GOAL", f"Successfully linked pending session to {session_id}")
-            # Update the linked session with the real goal and status
-            session = get_session(session_id)
-            if session:
-                # Update goal and status
-                from services.database import get_connection
-                from datetime import datetime
-                now = datetime.now().isoformat()
-                with get_connection() as conn:
-                    conn.execute(
-                        """UPDATE sessions SET original_goal = ?, current_status = ?, last_activity = ?
-                           WHERE session_id = ?""",
-                        (prompt, 'working', now, session_id)
-                    )
-                    # Add goal_set event to timeline
-                    conn.execute(
-                        """INSERT INTO timeline (session_id, event_type, content, timestamp)
-                           VALUES (?, 'goal_set', ?, ?)""",
-                        (session_id, prompt, now)
-                    )
-                log("GOAL", f"Updated linked session with goal: {prompt[:100]}...")
+        try:
+            # New simplified link - just updates session_id field, no FK issues!
+            session_pk = link_pending_session(pending_id, session_id, goal=prompt)
+            if session_pk:
+                log("GOAL", f"Successfully linked pending session (pk={session_pk}) to {session_id}")
+                log("GOAL", f"Updated with goal: {prompt[:100]}...")
                 write_hook_output()
                 return
+            else:
+                log("GOAL", "Pending session not found, will create new session")
+        except Exception as e:
+            log("GOAL", f"Failed to link pending session: {e}, will create new session")
 
     # Check if session already exists
     session = get_session(session_id)

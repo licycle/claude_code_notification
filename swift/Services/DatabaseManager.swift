@@ -4,7 +4,7 @@ import SQLite3
 // MARK: - Data Models
 
 struct SessionInfo {
-    let sessionId: String
+    let sessionId: String       // For pending sessions, this will be "pending_{pending_id}"
     let project: String
     let originalGoal: String
     let currentStatus: String
@@ -15,6 +15,8 @@ struct SessionInfo {
     let bundleId: String?
     let terminalPid: Int32?
     let windowId: UInt32?
+    // Internal primary key for database operations
+    let pk: Int?
 }
 
 struct ProgressInfo {
@@ -113,8 +115,11 @@ class DatabaseManager {
         defer { closeDatabase() }
 
         var sessions: [SessionInfo] = []
+        // New schema: session_id can be NULL for pending sessions
+        // Use COALESCE to create display ID: real session_id or 'pending_' + pending_id
         let query = """
-            SELECT session_id, project, original_goal, current_status, last_activity, created_at,
+            SELECT id, COALESCE(session_id, 'pending_' || pending_id) as display_id,
+                   project, original_goal, current_status, last_activity, created_at,
                    account_alias, bundle_id, terminal_pid, window_id
             FROM sessions
             WHERE current_status != 'completed'
@@ -126,22 +131,23 @@ class DatabaseManager {
         var statement: OpaquePointer?
         if sqlite3_prepare_v2(db, query, -1, &statement, nil) == SQLITE_OK {
             while sqlite3_step(statement) == SQLITE_ROW {
-                let sessionId = safeString(from: sqlite3_column_text(statement, 0))
-                let project = safeString(from: sqlite3_column_text(statement, 1))
-                let originalGoal = safeString(from: sqlite3_column_text(statement, 2))
-                let currentStatus = safeString(from: sqlite3_column_text(statement, 3))
+                let pk = Int(sqlite3_column_int(statement, 0))
+                let sessionId = safeString(from: sqlite3_column_text(statement, 1))
+                let project = safeString(from: sqlite3_column_text(statement, 2))
+                let originalGoal = safeString(from: sqlite3_column_text(statement, 3))
+                let currentStatus = safeString(from: sqlite3_column_text(statement, 4))
 
-                let lastActivityStr = safeString(from: sqlite3_column_text(statement, 4))
-                let createdAtStr = safeString(from: sqlite3_column_text(statement, 5))
+                let lastActivityStr = safeString(from: sqlite3_column_text(statement, 5))
+                let createdAtStr = safeString(from: sqlite3_column_text(statement, 6))
 
                 let lastActivity = dateFormatter.date(from: String(lastActivityStr.prefix(19))) ?? Date()
                 let createdAt = dateFormatter.date(from: String(createdAtStr.prefix(19))) ?? Date()
 
                 // Window info for terminal jumping
-                let accountAlias = safeString(from: sqlite3_column_text(statement, 6))
-                let bundleId = sqlite3_column_text(statement, 7).map { String(cString: $0) }
-                let terminalPid = sqlite3_column_type(statement, 8) != SQLITE_NULL ? Int32(sqlite3_column_int(statement, 8)) : nil
-                let windowId = sqlite3_column_type(statement, 9) != SQLITE_NULL ? UInt32(sqlite3_column_int(statement, 9)) : nil
+                let accountAlias = safeString(from: sqlite3_column_text(statement, 7))
+                let bundleId = sqlite3_column_text(statement, 8).map { String(cString: $0) }
+                let terminalPid = sqlite3_column_type(statement, 9) != SQLITE_NULL ? Int32(sqlite3_column_int(statement, 9)) : nil
+                let windowId = sqlite3_column_type(statement, 10) != SQLITE_NULL ? UInt32(sqlite3_column_int(statement, 10)) : nil
 
                 log("DATABASE: Found session id=\(sessionId.prefix(8)) status=\(currentStatus) goal=\(originalGoal.prefix(30))")
                 sessions.append(SessionInfo(
@@ -154,7 +160,8 @@ class DatabaseManager {
                     accountAlias: accountAlias.isEmpty ? "default" : accountAlias,
                     bundleId: bundleId,
                     terminalPid: terminalPid,
-                    windowId: windowId
+                    windowId: windowId,
+                    pk: pk
                 ))
             }
         }
@@ -170,7 +177,8 @@ class DatabaseManager {
 
         var sessions: [SessionInfo] = []
         var query = """
-            SELECT session_id, project, original_goal, current_status, last_activity, created_at,
+            SELECT id, COALESCE(session_id, 'pending_' || pending_id) as display_id,
+                   project, original_goal, current_status, last_activity, created_at,
                    account_alias, bundle_id, terminal_pid, window_id
             FROM sessions
             """
@@ -182,22 +190,23 @@ class DatabaseManager {
         var statement: OpaquePointer?
         if sqlite3_prepare_v2(db, query, -1, &statement, nil) == SQLITE_OK {
             while sqlite3_step(statement) == SQLITE_ROW {
-                let sessionId = safeString(from: sqlite3_column_text(statement, 0))
-                let project = safeString(from: sqlite3_column_text(statement, 1))
-                let originalGoal = safeString(from: sqlite3_column_text(statement, 2))
-                let currentStatus = safeString(from: sqlite3_column_text(statement, 3))
+                let pk = Int(sqlite3_column_int(statement, 0))
+                let sessionId = safeString(from: sqlite3_column_text(statement, 1))
+                let project = safeString(from: sqlite3_column_text(statement, 2))
+                let originalGoal = safeString(from: sqlite3_column_text(statement, 3))
+                let currentStatus = safeString(from: sqlite3_column_text(statement, 4))
 
-                let lastActivityStr = safeString(from: sqlite3_column_text(statement, 4))
-                let createdAtStr = safeString(from: sqlite3_column_text(statement, 5))
+                let lastActivityStr = safeString(from: sqlite3_column_text(statement, 5))
+                let createdAtStr = safeString(from: sqlite3_column_text(statement, 6))
 
                 let lastActivity = dateFormatter.date(from: String(lastActivityStr.prefix(19))) ?? Date()
                 let createdAt = dateFormatter.date(from: String(createdAtStr.prefix(19))) ?? Date()
 
                 // Window info for terminal jumping
-                let accountAlias = safeString(from: sqlite3_column_text(statement, 6))
-                let bundleId = sqlite3_column_text(statement, 7).map { String(cString: $0) }
-                let terminalPid = sqlite3_column_type(statement, 8) != SQLITE_NULL ? Int32(sqlite3_column_int(statement, 8)) : nil
-                let windowId = sqlite3_column_type(statement, 9) != SQLITE_NULL ? UInt32(sqlite3_column_int(statement, 9)) : nil
+                let accountAlias = safeString(from: sqlite3_column_text(statement, 7))
+                let bundleId = sqlite3_column_text(statement, 8).map { String(cString: $0) }
+                let terminalPid = sqlite3_column_type(statement, 9) != SQLITE_NULL ? Int32(sqlite3_column_int(statement, 9)) : nil
+                let windowId = sqlite3_column_type(statement, 10) != SQLITE_NULL ? UInt32(sqlite3_column_int(statement, 10)) : nil
 
                 sessions.append(SessionInfo(
                     sessionId: sessionId,
@@ -209,7 +218,8 @@ class DatabaseManager {
                     accountAlias: accountAlias.isEmpty ? "default" : accountAlias,
                     bundleId: bundleId,
                     terminalPid: terminalPid,
-                    windowId: windowId
+                    windowId: windowId,
+                    pk: pk
                 ))
             }
         }
@@ -222,17 +232,37 @@ class DatabaseManager {
         guard openDatabase() else { return nil }
         defer { closeDatabase() }
 
-        let query = """
-            SELECT todos_json, completed_count, total_count
-            FROM progress
-            WHERE session_id = ?
-            """
+        // New schema: progress uses session_pk, need to join with sessions
+        // Handle both real session_id and pending_xxx format
+        let query: String
+        let bindValue: String
+
+        if sessionId.hasPrefix("pending_") {
+            // Pending session - lookup by pending_id
+            let pendingId = String(sessionId.dropFirst(8))
+            query = """
+                SELECT p.todos_json, p.completed_count, p.total_count
+                FROM progress p
+                JOIN sessions s ON p.session_pk = s.id
+                WHERE s.pending_id = ?
+                """
+            bindValue = pendingId
+        } else {
+            // Real session - lookup by session_id
+            query = """
+                SELECT p.todos_json, p.completed_count, p.total_count
+                FROM progress p
+                JOIN sessions s ON p.session_pk = s.id
+                WHERE s.session_id = ?
+                """
+            bindValue = sessionId
+        }
 
         var statement: OpaquePointer?
         var result: ProgressInfo?
 
         if sqlite3_prepare_v2(db, query, -1, &statement, nil) == SQLITE_OK {
-            sqlite3_bind_text(statement, 1, sessionId, -1, nil)
+            sqlite3_bind_text(statement, 1, bindValue, -1, nil)
 
             if sqlite3_step(statement) == SQLITE_ROW {
                 let completed = Int(sqlite3_column_int(statement, 1))
@@ -256,19 +286,38 @@ class DatabaseManager {
         guard openDatabase() else { return nil }
         defer { closeDatabase() }
 
-        let query = """
-            SELECT question
-            FROM pending_decisions
-            WHERE session_id = ? AND resolved = 0
-            ORDER BY created_at DESC
-            LIMIT 1
-            """
+        // New schema: pending_decisions uses session_pk
+        let query: String
+        let bindValue: String
+
+        if sessionId.hasPrefix("pending_") {
+            let pendingId = String(sessionId.dropFirst(8))
+            query = """
+                SELECT pd.question
+                FROM pending_decisions pd
+                JOIN sessions s ON pd.session_pk = s.id
+                WHERE s.pending_id = ? AND pd.resolved = 0
+                ORDER BY pd.created_at DESC
+                LIMIT 1
+                """
+            bindValue = pendingId
+        } else {
+            query = """
+                SELECT pd.question
+                FROM pending_decisions pd
+                JOIN sessions s ON pd.session_pk = s.id
+                WHERE s.session_id = ? AND pd.resolved = 0
+                ORDER BY pd.created_at DESC
+                LIMIT 1
+                """
+            bindValue = sessionId
+        }
 
         var statement: OpaquePointer?
         var result: String?
 
         if sqlite3_prepare_v2(db, query, -1, &statement, nil) == SQLITE_OK {
-            sqlite3_bind_text(statement, 1, sessionId, -1, nil)
+            sqlite3_bind_text(statement, 1, bindValue, -1, nil)
 
             if sqlite3_step(statement) == SQLITE_ROW {
                 if let questionPtr = sqlite3_column_text(statement, 0) {
@@ -287,16 +336,34 @@ class DatabaseManager {
 
         var nodes: [TimelineNode] = []
 
-        let query = """
-            SELECT event_type, content, metadata_json, timestamp
-            FROM timeline
-            WHERE session_id = ?
-            ORDER BY timestamp ASC
-            """
+        // New schema: timeline uses session_pk
+        let query: String
+        let bindValue: String
+
+        if sessionId.hasPrefix("pending_") {
+            let pendingId = String(sessionId.dropFirst(8))
+            query = """
+                SELECT t.event_type, t.content, t.metadata_json, t.timestamp
+                FROM timeline t
+                JOIN sessions s ON t.session_pk = s.id
+                WHERE s.pending_id = ?
+                ORDER BY t.timestamp ASC
+                """
+            bindValue = pendingId
+        } else {
+            query = """
+                SELECT t.event_type, t.content, t.metadata_json, t.timestamp
+                FROM timeline t
+                JOIN sessions s ON t.session_pk = s.id
+                WHERE s.session_id = ?
+                ORDER BY t.timestamp ASC
+                """
+            bindValue = sessionId
+        }
 
         var statement: OpaquePointer?
         if sqlite3_prepare_v2(db, query, -1, &statement, nil) == SQLITE_OK {
-            sqlite3_bind_text(statement, 1, sessionId, -1, nil)
+            sqlite3_bind_text(statement, 1, bindValue, -1, nil)
 
             var lastEventTime: Date?
             var consecutiveProgress = 0
@@ -466,38 +533,57 @@ class DatabaseManager {
         guard openDatabase() else { return nil }
         defer { closeDatabase() }
 
-        let query = """
-            SELECT session_id, project, original_goal, current_status, last_activity, created_at,
-                   account_alias, bundle_id, terminal_pid, window_id
-            FROM sessions
-            WHERE session_id = ?
-            """
+        // Handle both real session_id and pending_xxx format
+        let query: String
+        let bindValue: String
+
+        if sessionId.hasPrefix("pending_") {
+            let pendingId = String(sessionId.dropFirst(8))
+            query = """
+                SELECT id, COALESCE(session_id, 'pending_' || pending_id) as display_id,
+                       project, original_goal, current_status, last_activity, created_at,
+                       account_alias, bundle_id, terminal_pid, window_id
+                FROM sessions
+                WHERE pending_id = ?
+                """
+            bindValue = pendingId
+        } else {
+            query = """
+                SELECT id, session_id, project, original_goal, current_status, last_activity, created_at,
+                       account_alias, bundle_id, terminal_pid, window_id
+                FROM sessions
+                WHERE session_id = ?
+                """
+            bindValue = sessionId
+        }
 
         var statement: OpaquePointer?
         var result: SessionInfo?
 
         if sqlite3_prepare_v2(db, query, -1, &statement, nil) == SQLITE_OK {
-            sqlite3_bind_text(statement, 1, sessionId, -1, nil)
+            sqlite3_bind_text(statement, 1, bindValue, -1, nil)
 
             if sqlite3_step(statement) == SQLITE_ROW {
-                let project = safeString(from: sqlite3_column_text(statement, 1))
-                let originalGoal = safeString(from: sqlite3_column_text(statement, 2))
-                let currentStatus = safeString(from: sqlite3_column_text(statement, 3))
+                let pk = Int(sqlite3_column_int(statement, 0))
+                let displayId = safeString(from: sqlite3_column_text(statement, 1))
+                let project = safeString(from: sqlite3_column_text(statement, 2))
+                let originalGoal = safeString(from: sqlite3_column_text(statement, 3))
+                let currentStatus = safeString(from: sqlite3_column_text(statement, 4))
 
-                let lastActivityStr = safeString(from: sqlite3_column_text(statement, 4))
-                let createdAtStr = safeString(from: sqlite3_column_text(statement, 5))
+                let lastActivityStr = safeString(from: sqlite3_column_text(statement, 5))
+                let createdAtStr = safeString(from: sqlite3_column_text(statement, 6))
 
                 let lastActivity = dateFormatter.date(from: String(lastActivityStr.prefix(19))) ?? Date()
                 let createdAt = dateFormatter.date(from: String(createdAtStr.prefix(19))) ?? Date()
 
                 // Window info for terminal jumping
-                let accountAlias = safeString(from: sqlite3_column_text(statement, 6))
-                let bundleId = sqlite3_column_text(statement, 7).map { String(cString: $0) }
-                let terminalPid = sqlite3_column_type(statement, 8) != SQLITE_NULL ? Int32(sqlite3_column_int(statement, 8)) : nil
-                let windowId = sqlite3_column_type(statement, 9) != SQLITE_NULL ? UInt32(sqlite3_column_int(statement, 9)) : nil
+                let accountAlias = safeString(from: sqlite3_column_text(statement, 7))
+                let bundleId = sqlite3_column_text(statement, 8).map { String(cString: $0) }
+                let terminalPid = sqlite3_column_type(statement, 9) != SQLITE_NULL ? Int32(sqlite3_column_int(statement, 9)) : nil
+                let windowId = sqlite3_column_type(statement, 10) != SQLITE_NULL ? UInt32(sqlite3_column_int(statement, 10)) : nil
 
                 result = SessionInfo(
-                    sessionId: sessionId,
+                    sessionId: displayId.isEmpty ? sessionId : displayId,
                     project: project,
                     originalGoal: originalGoal,
                     currentStatus: currentStatus,
@@ -506,7 +592,8 @@ class DatabaseManager {
                     accountAlias: accountAlias.isEmpty ? "default" : accountAlias,
                     bundleId: bundleId,
                     terminalPid: terminalPid,
-                    windowId: windowId
+                    windowId: windowId,
+                    pk: pk
                 )
             }
         }
@@ -519,17 +606,34 @@ class DatabaseManager {
         guard openDatabase() else { return 0 }
         defer { closeDatabase() }
 
-        let query = """
-            SELECT COUNT(*) FROM timeline
-            WHERE session_id = ?
-            AND event_type IN ('goal_set', 'user_input')
-            """
+        // New schema: timeline uses session_pk
+        let query: String
+        let bindValue: String
+
+        if sessionId.hasPrefix("pending_") {
+            let pendingId = String(sessionId.dropFirst(8))
+            query = """
+                SELECT COUNT(*) FROM timeline t
+                JOIN sessions s ON t.session_pk = s.id
+                WHERE s.pending_id = ?
+                AND t.event_type IN ('goal_set', 'user_input')
+                """
+            bindValue = pendingId
+        } else {
+            query = """
+                SELECT COUNT(*) FROM timeline t
+                JOIN sessions s ON t.session_pk = s.id
+                WHERE s.session_id = ?
+                AND t.event_type IN ('goal_set', 'user_input')
+                """
+            bindValue = sessionId
+        }
 
         var statement: OpaquePointer?
         var count = 0
 
         if sqlite3_prepare_v2(db, query, -1, &statement, nil) == SQLITE_OK {
-            sqlite3_bind_text(statement, 1, sessionId, -1, nil)
+            sqlite3_bind_text(statement, 1, bindValue, -1, nil)
 
             if sqlite3_step(statement) == SQLITE_ROW {
                 count = Int(sqlite3_column_int(statement, 0))
@@ -601,6 +705,67 @@ class DatabaseManager {
         let formatter = DateFormatter()
         formatter.dateFormat = "HH:mm"
         return formatter.string(from: date)
+    }
+
+    // MARK: - Cleanup Methods
+
+    /// 清理已死亡进程的会话
+    /// 检查 terminal_pid 是否存活，如果进程不存在则标记会话为 completed
+    /// - Returns: 清理的会话数量
+    @discardableResult
+    func cleanupDeadSessions() -> Int {
+        guard openDatabase() else { return 0 }
+        defer { closeDatabase() }
+
+        // 查询所有有 terminal_pid 的活跃会话
+        // New schema: use id (primary key) for updates
+        let query = """
+            SELECT id, terminal_pid
+            FROM sessions
+            WHERE current_status != 'completed'
+            AND terminal_pid IS NOT NULL
+            """
+
+        var deadSessions: [Int] = []  // Store primary keys
+        var statement: OpaquePointer?
+
+        if sqlite3_prepare_v2(db, query, -1, &statement, nil) == SQLITE_OK {
+            while sqlite3_step(statement) == SQLITE_ROW {
+                let pk = Int(sqlite3_column_int(statement, 0))
+                let pid = sqlite3_column_int(statement, 1)
+
+                // 检查进程是否存活 (kill with signal 0 只检查不发送信号)
+                if kill(pid, 0) != 0 {
+                    // 进程不存在 (errno == ESRCH) 或无权限 (errno == EPERM)
+                    // EPERM 说明进程存在但属于其他用户，这种情况不清理
+                    if errno == ESRCH {
+                        deadSessions.append(pk)
+                        log("CLEANUP: Session pk=\(pk) has dead PID \(pid)")
+                    }
+                }
+            }
+        }
+        sqlite3_finalize(statement)
+
+        // 标记死亡会话为 completed
+        if !deadSessions.isEmpty {
+            for pk in deadSessions {
+                let updateQuery = """
+                    UPDATE sessions
+                    SET current_status = 'completed', last_activity = datetime('now')
+                    WHERE id = ?
+                    """
+                var updateStmt: OpaquePointer?
+                if sqlite3_prepare_v2(db, updateQuery, -1, &updateStmt, nil) == SQLITE_OK {
+                    sqlite3_bind_int(updateStmt, 1, Int32(pk))
+                    sqlite3_step(updateStmt)
+                }
+                sqlite3_finalize(updateStmt)
+            }
+            log("CLEANUP: Marked \(deadSessions.count) dead sessions as completed")
+        }
+
+        return deadSessions.count
     }
 
     // MARK: - Relative Time

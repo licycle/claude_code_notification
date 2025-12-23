@@ -7,6 +7,7 @@ class StatusBarController: NSObject {
     private var popover: NSPopover!
     private var sessionListViewController: SessionListViewController!
     private var refreshTimer: Timer?
+    private var cleanupTimer: Timer?
     private var eventMonitor: Any?
 
     override init() {
@@ -14,12 +15,14 @@ class StatusBarController: NSObject {
         setupStatusItem()
         setupPopover()
         startRefreshTimer()
+        startCleanupTimer()
         setupEventMonitor()
         log("STATUSBAR: Initialized")
     }
 
     deinit {
         refreshTimer?.invalidate()
+        cleanupTimer?.invalidate()
         if let monitor = eventMonitor {
             NSEvent.removeMonitor(monitor)
         }
@@ -61,6 +64,25 @@ class StatusBarController: NSObject {
         // Refresh every 5 seconds
         refreshTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
             self?.refresh()
+        }
+    }
+
+    private func startCleanupTimer() {
+        // Cleanup dead sessions every 5 minutes
+        cleanupTimer = Timer.scheduledTimer(withTimeInterval: 300.0, repeats: true) { [weak self] _ in
+            self?.cleanupDeadSessions()
+        }
+        // Also run once at startup (delayed by 10 seconds to let things settle)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
+            self?.cleanupDeadSessions()
+        }
+    }
+
+    private func cleanupDeadSessions() {
+        let count = DatabaseManager.shared.cleanupDeadSessions()
+        if count > 0 {
+            log("STATUSBAR: Cleaned up \(count) dead sessions")
+            refresh()
         }
     }
 
@@ -450,9 +472,7 @@ class SessionCardView: NSView {
         jumpButton.frame = NSRect(x: 280, y: 10, width: 52, height: 22)
         addSubview(jumpButton)
 
-        // Click gesture
-        let clickGesture = NSClickGestureRecognizer(target: self, action: #selector(cardClicked))
-        addGestureRecognizer(clickGesture)
+        // Click gesture - use mouseDown override instead to avoid intercepting button clicks
     }
 
     private func shortenPath(_ path: String) -> String {
@@ -519,7 +539,20 @@ class SessionCardView: NSView {
         }
     }
 
-    @objc private func cardClicked() {
+    // Handle card click via mouseDown to avoid intercepting button clicks
+    override func mouseDown(with event: NSEvent) {
+        let location = convert(event.locationInWindow, from: nil)
+
+        // Check if click is on a button (subview that handles its own clicks)
+        for subview in subviews {
+            if subview is NSButton && subview.frame.contains(location) {
+                // Let the button handle it
+                super.mouseDown(with: event)
+                return
+            }
+        }
+
+        // Otherwise, treat as card click
         delegate?.sessionCardDidClick(session)
     }
 

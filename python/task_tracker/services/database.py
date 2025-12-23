@@ -2,6 +2,12 @@
 """
 database.py - Task Tracker Database Module
 SQLite-based storage for multi-session task tracking
+
+New Schema Design (v2):
+- Uses auto-increment `id` as primary key for sessions table
+- `session_id` is a regular field (can be NULL for pending sessions)
+- `pending_id` field for linking pending sessions
+- Child tables use `session_pk` (references sessions.id) as foreign key
 """
 import sqlite3
 import json
@@ -15,85 +21,83 @@ from contextlib import contextmanager
 DB_DIR = Path.home() / '.claude-task-tracker'
 DB_PATH = DB_DIR / 'tasks.db'
 
-# Schema SQL
+# Schema SQL - New design with auto-increment id as primary key
 SCHEMA_SQL = """
--- Task sessions table (one per Claude Code session)
+-- Main table: uses auto-increment id as primary key
 CREATE TABLE IF NOT EXISTS sessions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id TEXT UNIQUE NOT NULL,
+    session_id TEXT,              -- Real session_id (NULL for pending)
+    pending_id TEXT,              -- Pending session UUID
     project TEXT NOT NULL,
     original_goal TEXT NOT NULL,
-    current_status TEXT DEFAULT 'working',
+    current_status TEXT DEFAULT 'idle',
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     last_activity TEXT DEFAULT CURRENT_TIMESTAMP,
-    -- Window info for terminal jumping (added v2)
     account_alias TEXT DEFAULT 'default',
     bundle_id TEXT,
     terminal_pid INTEGER,
     window_id INTEGER
 );
 
--- Goal evolution table (track goal changes over time)
-CREATE TABLE IF NOT EXISTS goal_evolution (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id TEXT NOT NULL,
-    goal_content TEXT NOT NULL,
-    timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
-);
+-- Indexes
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_session_id ON sessions(session_id) WHERE session_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_pending_id ON sessions(pending_id) WHERE pending_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(current_status);
+CREATE INDEX IF NOT EXISTS idx_sessions_activity ON sessions(last_activity);
 
--- Progress table (current todo state)
+-- Child tables: use session_pk referencing sessions.id
 CREATE TABLE IF NOT EXISTS progress (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id TEXT UNIQUE NOT NULL,
+    session_pk INTEGER NOT NULL,
     todos_json TEXT,
     completed_count INTEGER DEFAULT 0,
     total_count INTEGER DEFAULT 0,
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
+    FOREIGN KEY (session_pk) REFERENCES sessions(id) ON DELETE CASCADE
 );
 
--- Pending decisions table (questions waiting for user)
+CREATE TABLE IF NOT EXISTS timeline (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_pk INTEGER NOT NULL,
+    event_type TEXT NOT NULL,
+    content TEXT,
+    metadata_json TEXT,
+    timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (session_pk) REFERENCES sessions(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS pending_decisions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id TEXT NOT NULL,
+    session_pk INTEGER NOT NULL,
     question TEXT NOT NULL,
     options_json TEXT,
     context TEXT,
     resolved INTEGER DEFAULT 0,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     resolved_at TEXT,
-    FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
+    FOREIGN KEY (session_pk) REFERENCES sessions(id) ON DELETE CASCADE
 );
 
--- Snapshots table (state at Stop events)
 CREATE TABLE IF NOT EXISTS snapshots (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id TEXT NOT NULL,
+    session_pk INTEGER NOT NULL,
     last_user_message TEXT,
     last_assistant_message TEXT,
     summary_json TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
+    FOREIGN KEY (session_pk) REFERENCES sessions(id) ON DELETE CASCADE
 );
 
--- Timeline table (all events for a session)
-CREATE TABLE IF NOT EXISTS timeline (
+CREATE TABLE IF NOT EXISTS goal_evolution (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id TEXT NOT NULL,
-    event_type TEXT NOT NULL,
-    content TEXT,
-    metadata_json TEXT,
+    session_pk INTEGER NOT NULL,
+    goal_content TEXT NOT NULL,
     timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
+    FOREIGN KEY (session_pk) REFERENCES sessions(id) ON DELETE CASCADE
 );
 
--- Indexes for performance
-CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(current_status);
-CREATE INDEX IF NOT EXISTS idx_sessions_activity ON sessions(last_activity);
-CREATE INDEX IF NOT EXISTS idx_timeline_session ON timeline(session_id);
-CREATE INDEX IF NOT EXISTS idx_timeline_type ON timeline(event_type);
-CREATE INDEX IF NOT EXISTS idx_pending_unresolved ON pending_decisions(session_id, resolved);
+-- Index for progress lookup
+CREATE UNIQUE INDEX IF NOT EXISTS idx_progress_session ON progress(session_pk);
 """
 
 
@@ -118,38 +122,14 @@ def init_database():
     """Initialize database tables"""
     with get_connection() as conn:
         conn.executescript(SCHEMA_SQL)
-    # Run migrations for existing databases
-    _migrate_add_window_info_columns()
 
 
-def _migrate_add_window_info_columns():
-    """
-    Migration: Add window info columns to existing sessions table.
-    These columns are used for terminal jumping feature.
-    """
-    new_columns = [
-        ('account_alias', "TEXT DEFAULT 'default'"),
-        ('bundle_id', 'TEXT'),
-        ('terminal_pid', 'INTEGER'),
-        ('window_id', 'INTEGER'),
-    ]
-
-    with get_connection() as conn:
-        # Get existing columns
-        cursor = conn.execute("PRAGMA table_info(sessions)")
-        existing_cols = {row['name'] for row in cursor.fetchall()}
-
-        # Add missing columns
-        for col_name, col_type in new_columns:
-            if col_name not in existing_cols:
-                try:
-                    conn.execute(f"ALTER TABLE sessions ADD COLUMN {col_name} {col_type}")
-                except sqlite3.OperationalError:
-                    pass  # Column already exists
-
+# ============================================================================
+# Session Operations
+# ============================================================================
 
 def get_session(session_id: str) -> Optional[Dict]:
-    """Get session by ID"""
+    """Get session by session_id"""
     with get_connection() as conn:
         cursor = conn.execute(
             "SELECT * FROM sessions WHERE session_id = ?",
@@ -157,6 +137,17 @@ def get_session(session_id: str) -> Optional[Dict]:
         )
         row = cursor.fetchone()
         return dict(row) if row else None
+
+
+def get_session_pk(session_id: str) -> Optional[int]:
+    """Get session primary key (id) by session_id"""
+    with get_connection() as conn:
+        cursor = conn.execute(
+            "SELECT id FROM sessions WHERE session_id = ?",
+            (session_id,)
+        )
+        row = cursor.fetchone()
+        return row['id'] if row else None
 
 
 def create_session(
@@ -168,51 +159,71 @@ def create_session(
     terminal_pid: int = None,
     window_id: int = None,
     initial_status: str = 'working'
-) -> None:
+) -> int:
     """Create a new session with optional window info for terminal jumping
 
     Args:
         initial_status: Initial session status. 'working' when user submits prompt,
                        'idle' if session is created before user input.
+
+    Returns:
+        session_pk: The primary key (id) of the created session
     """
     now = datetime.now().isoformat()
     with get_connection() as conn:
-        conn.execute(
-            """INSERT OR IGNORE INTO sessions
+        cursor = conn.execute(
+            """INSERT INTO sessions
                (session_id, project, original_goal, current_status, created_at, last_activity,
                 account_alias, bundle_id, terminal_pid, window_id)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (session_id, project, original_goal, initial_status, now, now,
              account_alias, bundle_id, terminal_pid, window_id)
         )
+        session_pk = cursor.lastrowid
+
         # Record to timeline
         conn.execute(
-            """INSERT INTO timeline (session_id, event_type, content, timestamp)
+            """INSERT INTO timeline (session_pk, event_type, content, timestamp)
                VALUES (?, 'goal_set', ?, ?)""",
-            (session_id, original_goal, now)
+            (session_pk, original_goal, now)
         )
         # Initialize progress
         conn.execute(
-            """INSERT OR IGNORE INTO progress (session_id) VALUES (?)""",
-            (session_id,)
+            """INSERT INTO progress (session_pk) VALUES (?)""",
+            (session_pk,)
         )
+        return session_pk
 
 
 def update_session_status(session_id: str, status: str) -> None:
     """Update session status"""
     now = datetime.now().isoformat()
     with get_connection() as conn:
+        # Get session_pk first
+        cursor = conn.execute(
+            "SELECT id FROM sessions WHERE session_id = ?",
+            (session_id,)
+        )
+        row = cursor.fetchone()
+        if not row:
+            return
+        session_pk = row['id']
+
         conn.execute(
             """UPDATE sessions SET current_status = ?, last_activity = ?
-               WHERE session_id = ?""",
-            (status, now, session_id)
+               WHERE id = ?""",
+            (status, now, session_pk)
         )
         conn.execute(
-            """INSERT INTO timeline (session_id, event_type, content, timestamp)
+            """INSERT INTO timeline (session_pk, event_type, content, timestamp)
                VALUES (?, 'status_change', ?, ?)""",
-            (session_id, status, now)
+            (session_pk, status, now)
         )
 
+
+# ============================================================================
+# Progress Operations
+# ============================================================================
 
 def update_progress(session_id: str, todos: List[Dict]) -> None:
     """Update progress with todo list"""
@@ -221,22 +232,32 @@ def update_progress(session_id: str, todos: List[Dict]) -> None:
     now = datetime.now().isoformat()
 
     with get_connection() as conn:
+        # Get session_pk
+        cursor = conn.execute(
+            "SELECT id FROM sessions WHERE session_id = ?",
+            (session_id,)
+        )
+        row = cursor.fetchone()
+        if not row:
+            return
+        session_pk = row['id']
+
         conn.execute(
             """INSERT OR REPLACE INTO progress
-               (session_id, todos_json, completed_count, total_count, updated_at)
+               (session_pk, todos_json, completed_count, total_count, updated_at)
                VALUES (?, ?, ?, ?, ?)""",
-            (session_id, json.dumps(todos, ensure_ascii=False), completed, total, now)
+            (session_pk, json.dumps(todos, ensure_ascii=False), completed, total, now)
         )
         # Update session activity
         conn.execute(
-            """UPDATE sessions SET last_activity = ? WHERE session_id = ?""",
-            (now, session_id)
+            """UPDATE sessions SET last_activity = ? WHERE id = ?""",
+            (now, session_pk)
         )
         # Record to timeline
         conn.execute(
-            """INSERT INTO timeline (session_id, event_type, metadata_json, timestamp)
+            """INSERT INTO timeline (session_pk, event_type, metadata_json, timestamp)
                VALUES (?, 'progress_update', ?, ?)""",
-            (session_id, json.dumps({'completed': completed, 'total': total}), now)
+            (session_pk, json.dumps({'completed': completed, 'total': total}), now)
         )
 
 
@@ -244,7 +265,9 @@ def get_progress(session_id: str) -> Optional[Dict]:
     """Get current progress for a session"""
     with get_connection() as conn:
         cursor = conn.execute(
-            "SELECT * FROM progress WHERE session_id = ?",
+            """SELECT p.* FROM progress p
+               JOIN sessions s ON p.session_pk = s.id
+               WHERE s.session_id = ?""",
             (session_id,)
         )
         row = cursor.fetchone()
@@ -256,19 +279,33 @@ def get_progress(session_id: str) -> Optional[Dict]:
         return None
 
 
+# ============================================================================
+# Pending Decisions Operations
+# ============================================================================
+
 def add_pending_decision(session_id: str, question: str, options: List[str], context: str = None) -> int:
     """Add a pending decision"""
     now = datetime.now().isoformat()
     with get_connection() as conn:
+        # Get session_pk
         cursor = conn.execute(
-            """INSERT INTO pending_decisions (session_id, question, options_json, context, created_at)
+            "SELECT id FROM sessions WHERE session_id = ?",
+            (session_id,)
+        )
+        row = cursor.fetchone()
+        if not row:
+            return -1
+        session_pk = row['id']
+
+        cursor = conn.execute(
+            """INSERT INTO pending_decisions (session_pk, question, options_json, context, created_at)
                VALUES (?, ?, ?, ?, ?)""",
-            (session_id, question, json.dumps(options, ensure_ascii=False), context, now)
+            (session_pk, question, json.dumps(options, ensure_ascii=False), context, now)
         )
         # Update session activity
         conn.execute(
-            """UPDATE sessions SET last_activity = ? WHERE session_id = ?""",
-            (now, session_id)
+            """UPDATE sessions SET last_activity = ? WHERE id = ?""",
+            (now, session_pk)
         )
         return cursor.lastrowid
 
@@ -277,10 +314,20 @@ def resolve_pending_decisions(session_id: str) -> None:
     """Mark all pending decisions as resolved"""
     now = datetime.now().isoformat()
     with get_connection() as conn:
+        # Get session_pk
+        cursor = conn.execute(
+            "SELECT id FROM sessions WHERE session_id = ?",
+            (session_id,)
+        )
+        row = cursor.fetchone()
+        if not row:
+            return
+        session_pk = row['id']
+
         conn.execute(
             """UPDATE pending_decisions SET resolved = 1, resolved_at = ?
-               WHERE session_id = ? AND resolved = 0""",
-            (now, session_id)
+               WHERE session_pk = ? AND resolved = 0""",
+            (now, session_pk)
         )
 
 
@@ -288,23 +335,38 @@ def get_pending_decisions(session_id: str) -> List[Dict]:
     """Get unresolved pending decisions for a session"""
     with get_connection() as conn:
         cursor = conn.execute(
-            """SELECT * FROM pending_decisions
-               WHERE session_id = ? AND resolved = 0
-               ORDER BY created_at DESC""",
+            """SELECT pd.* FROM pending_decisions pd
+               JOIN sessions s ON pd.session_pk = s.id
+               WHERE s.session_id = ? AND pd.resolved = 0
+               ORDER BY pd.created_at DESC""",
             (session_id,)
         )
         return [dict(row) for row in cursor.fetchall()]
 
 
+# ============================================================================
+# Snapshot Operations
+# ============================================================================
+
 def save_snapshot(session_id: str, last_user: str, last_assistant: str, summary: Dict = None) -> None:
     """Save a state snapshot"""
     now = datetime.now().isoformat()
     with get_connection() as conn:
+        # Get session_pk
+        cursor = conn.execute(
+            "SELECT id FROM sessions WHERE session_id = ?",
+            (session_id,)
+        )
+        row = cursor.fetchone()
+        if not row:
+            return
+        session_pk = row['id']
+
         conn.execute(
             """INSERT INTO snapshots
-               (session_id, last_user_message, last_assistant_message, summary_json, created_at)
+               (session_pk, last_user_message, last_assistant_message, summary_json, created_at)
                VALUES (?, ?, ?, ?, ?)""",
-            (session_id, last_user, last_assistant,
+            (session_pk, last_user, last_assistant,
              json.dumps(summary, ensure_ascii=False) if summary else None, now)
         )
 
@@ -313,8 +375,10 @@ def get_latest_snapshot(session_id: str) -> Optional[Dict]:
     """Get the latest snapshot for a session"""
     with get_connection() as conn:
         cursor = conn.execute(
-            """SELECT * FROM snapshots WHERE session_id = ?
-               ORDER BY created_at DESC LIMIT 1""",
+            """SELECT sn.* FROM snapshots sn
+               JOIN sessions s ON sn.session_pk = s.id
+               WHERE s.session_id = ?
+               ORDER BY sn.created_at DESC LIMIT 1""",
             (session_id,)
         )
         row = cursor.fetchone()
@@ -326,40 +390,40 @@ def get_latest_snapshot(session_id: str) -> Optional[Dict]:
         return None
 
 
-def get_active_sessions() -> List[Dict]:
-    """Get all active (non-completed) sessions with their latest state"""
+# ============================================================================
+# Timeline Operations
+# ============================================================================
+
+def add_timeline_event(session_id: str, event_type: str, content: str = None, metadata: Dict = None) -> None:
+    """Add an event to the timeline"""
+    now = datetime.now().isoformat()
     with get_connection() as conn:
+        # Get session_pk
         cursor = conn.execute(
-            """SELECT s.*,
-                      p.todos_json, p.completed_count, p.total_count,
-                      (SELECT question FROM pending_decisions pd
-                       WHERE pd.session_id = s.session_id AND pd.resolved = 0
-                       ORDER BY pd.created_at DESC LIMIT 1) as pending_question,
-                      (SELECT options_json FROM pending_decisions pd
-                       WHERE pd.session_id = s.session_id AND pd.resolved = 0
-                       ORDER BY pd.created_at DESC LIMIT 1) as pending_options
-               FROM sessions s
-               LEFT JOIN progress p ON s.session_id = p.session_id
-               WHERE s.current_status != 'completed'
-               ORDER BY s.last_activity DESC"""
+            "SELECT id FROM sessions WHERE session_id = ?",
+            (session_id,)
         )
-        results = []
-        for row in cursor.fetchall():
-            item = dict(row)
-            if item.get('todos_json'):
-                item['todos'] = json.loads(item['todos_json'])
-            if item.get('pending_options'):
-                item['pending_options'] = json.loads(item['pending_options'])
-            results.append(item)
-        return results
+        row = cursor.fetchone()
+        if not row:
+            return
+        session_pk = row['id']
+
+        conn.execute(
+            """INSERT INTO timeline (session_pk, event_type, content, metadata_json, timestamp)
+               VALUES (?, ?, ?, ?, ?)""",
+            (session_pk, event_type, content,
+             json.dumps(metadata, ensure_ascii=False) if metadata else None, now)
+        )
 
 
 def get_session_timeline(session_id: str, limit: int = 50) -> List[Dict]:
     """Get timeline events for a session"""
     with get_connection() as conn:
         cursor = conn.execute(
-            """SELECT * FROM timeline WHERE session_id = ?
-               ORDER BY timestamp DESC LIMIT ?""",
+            """SELECT t.* FROM timeline t
+               JOIN sessions s ON t.session_pk = s.id
+               WHERE s.session_id = ?
+               ORDER BY t.timestamp DESC LIMIT ?""",
             (session_id, limit)
         )
         results = []
@@ -371,17 +435,9 @@ def get_session_timeline(session_id: str, limit: int = 50) -> List[Dict]:
         return results
 
 
-def add_timeline_event(session_id: str, event_type: str, content: str = None, metadata: Dict = None) -> None:
-    """Add an event to the timeline"""
-    now = datetime.now().isoformat()
-    with get_connection() as conn:
-        conn.execute(
-            """INSERT INTO timeline (session_id, event_type, content, metadata_json, timestamp)
-               VALUES (?, ?, ?, ?, ?)""",
-            (session_id, event_type, content,
-             json.dumps(metadata, ensure_ascii=False) if metadata else None, now)
-        )
-
+# ============================================================================
+# Session Lifecycle Operations
+# ============================================================================
 
 def mark_session_completed(session_id: str) -> None:
     """Mark a session as completed"""
@@ -391,13 +447,13 @@ def mark_session_completed(session_id: str) -> None:
 def get_round_count(session_id: str) -> int:
     """
     获取用户输入轮数（goal_set + user_input 事件数）
-    轮数 = 1 (goal_set) + count(user_input events)
     """
     with get_connection() as conn:
         cursor = conn.execute(
-            """SELECT COUNT(*) FROM timeline
-               WHERE session_id = ?
-               AND event_type IN ('goal_set', 'user_input')""",
+            """SELECT COUNT(*) FROM timeline t
+               JOIN sessions s ON t.session_pk = s.id
+               WHERE s.session_id = ?
+               AND t.event_type IN ('goal_set', 'user_input')""",
             (session_id,)
         )
         return cursor.fetchone()[0]
@@ -406,14 +462,14 @@ def get_round_count(session_id: str) -> int:
 def get_latest_user_input(session_id: str) -> Optional[str]:
     """
     获取最新的用户输入内容
-    优先返回最新的 user_input 事件，如果没有则返回 goal_set 事件
     """
     with get_connection() as conn:
         cursor = conn.execute(
-            """SELECT content FROM timeline
-               WHERE session_id = ?
-               AND event_type IN ('goal_set', 'user_input')
-               ORDER BY timestamp DESC
+            """SELECT t.content FROM timeline t
+               JOIN sessions s ON t.session_pk = s.id
+               WHERE s.session_id = ?
+               AND t.event_type IN ('goal_set', 'user_input')
+               ORDER BY t.timestamp DESC
                LIMIT 1""",
             (session_id,)
         )
@@ -443,102 +499,93 @@ def create_pending_session(
     bundle_id: str = None,
     terminal_pid: int = None,
     window_id: int = None
-) -> None:
+) -> int:
     """
     Create a pending session before user submits first prompt.
     This allows the status bar to show 'idle' state immediately when Claude starts.
 
-    The pending_id is a temporary UUID that will be replaced with the real session_id
-    when UserPromptSubmit hook fires.
+    Returns:
+        session_pk: The primary key (id) of the created session
     """
     now = datetime.now().isoformat()
-    # Use pending_id as session_id with special prefix
-    session_id = f"pending_{pending_id}"
 
     with get_connection() as conn:
-        # Check if pending session already exists for this project (cleanup stale ones)
+        # Cleanup stale pending sessions for this project (> 15 minutes old)
         conn.execute(
             """DELETE FROM sessions
-               WHERE session_id LIKE 'pending_%'
+               WHERE pending_id IS NOT NULL
+               AND session_id IS NULL
                AND project = ?
-               AND julianday('now') - julianday(created_at) > 0.01""",  # > ~15 minutes
+               AND julianday('now') - julianday(created_at) > 0.01""",
             (project,)
         )
 
-        conn.execute(
-            """INSERT OR REPLACE INTO sessions
-               (session_id, project, original_goal, current_status, created_at, last_activity,
+        cursor = conn.execute(
+            """INSERT INTO sessions
+               (session_id, pending_id, project, original_goal, current_status, created_at, last_activity,
                 account_alias, bundle_id, terminal_pid, window_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (session_id, project, '等待输入...', 'idle', now, now,
+               VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (pending_id, project, '等待输入...', 'idle', now, now,
              account_alias, bundle_id, terminal_pid, window_id)
         )
+        session_pk = cursor.lastrowid
+
         # Initialize progress
         conn.execute(
-            """INSERT OR IGNORE INTO progress (session_id) VALUES (?)""",
-            (session_id,)
+            """INSERT INTO progress (session_pk) VALUES (?)""",
+            (session_pk,)
         )
+        return session_pk
 
 
-def link_pending_session(pending_id: str, real_session_id: str, project: str) -> bool:
+def link_pending_session(pending_id: str, real_session_id: str, goal: str = None) -> Optional[int]:
     """
     Link a pending session to the real session_id.
     Called when UserPromptSubmit hook fires with the real session_id.
 
-    Returns True if a pending session was found and linked, False otherwise.
+    This is now simple: just update the session_id field, no need to update primary key!
+
+    Returns:
+        session_pk if successful, None otherwise
     """
-    pending_session_id = f"pending_{pending_id}"
+    now = datetime.now().isoformat()
 
     with get_connection() as conn:
-        # Check if pending session exists
+        # Find pending session
         cursor = conn.execute(
-            "SELECT * FROM sessions WHERE session_id = ? AND project = ?",
-            (pending_session_id, project)
+            "SELECT id FROM sessions WHERE pending_id = ? AND session_id IS NULL",
+            (pending_id,)
         )
-        pending = cursor.fetchone()
+        row = cursor.fetchone()
 
-        if not pending:
-            return False
+        if not row:
+            return None
 
-        # Update session_id in all related tables
-        now = datetime.now().isoformat()
+        session_pk = row['id']
 
-        # Update sessions table
-        conn.execute(
-            """UPDATE sessions SET session_id = ?, last_activity = ?
-               WHERE session_id = ?""",
-            (real_session_id, now, pending_session_id)
-        )
+        # Update session_id and status - no FK issues since we're not changing the primary key!
+        if goal:
+            conn.execute(
+                """UPDATE sessions
+                   SET session_id = ?, original_goal = ?, current_status = 'working', last_activity = ?
+                   WHERE id = ?""",
+                (real_session_id, goal, now, session_pk)
+            )
+            # Add goal_set event
+            conn.execute(
+                """INSERT INTO timeline (session_pk, event_type, content, timestamp)
+                   VALUES (?, 'goal_set', ?, ?)""",
+                (session_pk, goal, now)
+            )
+        else:
+            conn.execute(
+                """UPDATE sessions
+                   SET session_id = ?, current_status = 'working', last_activity = ?
+                   WHERE id = ?""",
+                (real_session_id, now, session_pk)
+            )
 
-        # Update progress table
-        conn.execute(
-            """UPDATE progress SET session_id = ?
-               WHERE session_id = ?""",
-            (real_session_id, pending_session_id)
-        )
-
-        # Update timeline table
-        conn.execute(
-            """UPDATE timeline SET session_id = ?
-               WHERE session_id = ?""",
-            (real_session_id, pending_session_id)
-        )
-
-        # Update pending_decisions table
-        conn.execute(
-            """UPDATE pending_decisions SET session_id = ?
-               WHERE session_id = ?""",
-            (real_session_id, pending_session_id)
-        )
-
-        # Update snapshots table
-        conn.execute(
-            """UPDATE snapshots SET session_id = ?
-               WHERE session_id = ?""",
-            (real_session_id, pending_session_id)
-        )
-
-        return True
+        return session_pk
 
 
 def get_pending_session_by_project(project: str) -> Optional[Dict]:
@@ -546,12 +593,74 @@ def get_pending_session_by_project(project: str) -> Optional[Dict]:
     with get_connection() as conn:
         cursor = conn.execute(
             """SELECT * FROM sessions
-               WHERE session_id LIKE 'pending_%' AND project = ?
+               WHERE pending_id IS NOT NULL AND session_id IS NULL AND project = ?
                ORDER BY created_at DESC LIMIT 1""",
             (project,)
         )
         row = cursor.fetchone()
         return dict(row) if row else None
+
+
+def get_session_by_pending_id(pending_id: str) -> Optional[Dict]:
+    """Get session by pending_id"""
+    with get_connection() as conn:
+        cursor = conn.execute(
+            "SELECT * FROM sessions WHERE pending_id = ?",
+            (pending_id,)
+        )
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
+def cleanup_pending_session(pending_id: str) -> int:
+    """
+    Clean up a pending session (mark as completed).
+    Called when Claude exits without user submitting a prompt.
+
+    Returns:
+        Number of sessions cleaned up
+    """
+    now = datetime.now().isoformat()
+    with get_connection() as conn:
+        cursor = conn.execute(
+            """UPDATE sessions
+               SET current_status = 'completed', last_activity = ?
+               WHERE pending_id = ? AND session_id IS NULL AND current_status != 'completed'""",
+            (now, pending_id)
+        )
+        return cursor.rowcount
+
+
+# ============================================================================
+# Active Sessions Query
+# ============================================================================
+
+def get_active_sessions() -> List[Dict]:
+    """Get all active (non-completed) sessions with their latest state"""
+    with get_connection() as conn:
+        cursor = conn.execute(
+            """SELECT s.*,
+                      p.todos_json, p.completed_count, p.total_count,
+                      (SELECT question FROM pending_decisions pd
+                       WHERE pd.session_pk = s.id AND pd.resolved = 0
+                       ORDER BY pd.created_at DESC LIMIT 1) as pending_question,
+                      (SELECT options_json FROM pending_decisions pd
+                       WHERE pd.session_pk = s.id AND pd.resolved = 0
+                       ORDER BY pd.created_at DESC LIMIT 1) as pending_options
+               FROM sessions s
+               LEFT JOIN progress p ON s.id = p.session_pk
+               WHERE s.current_status != 'completed'
+               ORDER BY s.last_activity DESC"""
+        )
+        results = []
+        for row in cursor.fetchall():
+            item = dict(row)
+            if item.get('todos_json'):
+                item['todos'] = json.loads(item['todos_json'])
+            if item.get('pending_options'):
+                item['pending_options'] = json.loads(item['pending_options'])
+            results.append(item)
+        return results
 
 
 # ============================================================================
@@ -561,22 +670,13 @@ def get_pending_session_by_project(project: str) -> Optional[Dict]:
 def aggregate_timeline_nodes(session_id: str, max_nodes: int = 20) -> List[Dict]:
     """
     Aggregate raw timeline events into meaningful nodes for UI display.
-
-    Aggregation Rules:
-    - SHOW: goal_set, consecutive 3+ todo completions, status changes to waiting_*,
-            snapshots with summary, all todos completed
-    - HIDE: single progress_update, consecutive same status_change,
-            changes < 30s apart, empty snapshots
-
-    Returns:
-        List of nodes: [{time, type, title, description, status}]
-        - type: start, milestone, waiting, permission, snapshot, complete
-        - status: completed, current, pending
     """
     with get_connection() as conn:
         cursor = conn.execute(
-            """SELECT * FROM timeline WHERE session_id = ?
-               ORDER BY timestamp ASC""",
+            """SELECT t.* FROM timeline t
+               JOIN sessions s ON t.session_pk = s.id
+               WHERE s.session_id = ?
+               ORDER BY t.timestamp ASC""",
             (session_id,)
         )
         raw_events = [dict(row) for row in cursor.fetchall()]
@@ -625,7 +725,7 @@ def aggregate_timeline_nodes(session_id: str, max_nodes: int = 20) -> List[Dict]
 
         elif event_type == 'status_change':
             if content == last_status:
-                continue  # Skip duplicate status
+                continue
             last_status = content
 
             if content == 'waiting_for_user':
@@ -657,12 +757,10 @@ def aggregate_timeline_nodes(session_id: str, max_nodes: int = 20) -> List[Dict]
             completed = metadata.get('completed', 0)
             total = metadata.get('total', 0)
 
-            # Track consecutive completions
             if completed > last_completed_count:
                 consecutive_progress += (completed - last_completed_count)
             last_completed_count = completed
 
-            # Create milestone for 3+ consecutive completions
             if consecutive_progress >= 3:
                 node = {
                     'time': event_time.strftime('%H:%M'),
@@ -673,7 +771,6 @@ def aggregate_timeline_nodes(session_id: str, max_nodes: int = 20) -> List[Dict]
                 }
                 consecutive_progress = 0
 
-            # All todos completed
             if completed == total and total > 0:
                 node = {
                     'time': event_time.strftime('%H:%M'),
@@ -687,23 +784,15 @@ def aggregate_timeline_nodes(session_id: str, max_nodes: int = 20) -> List[Dict]
             nodes.append(node)
             last_event_time = event_time
 
-    # Mark last node as current if not completed
     if nodes and nodes[-1]['type'] not in ['complete']:
         nodes[-1]['status'] = 'current'
 
-    # Limit to max_nodes (take most recent)
     return nodes[-max_nodes:] if len(nodes) > max_nodes else nodes
 
 
 def get_session_summary(session_id: str) -> Optional[Dict]:
     """
     Get aggregated session summary for menu bar display.
-
-    Returns a complete summary including:
-    - Session info (project, goal, status)
-    - Progress (completed/total, todos)
-    - Pending decisions
-    - Aggregated timeline nodes
     """
     session = get_session(session_id)
     if not session:
@@ -726,7 +815,6 @@ def get_session_summary(session_id: str) -> Optional[Dict]:
         'timeline': timeline_nodes,
         'last_activity': session.get('last_activity', ''),
         'created_at': session.get('created_at', ''),
-        # Window info for terminal jumping
         'account_alias': session.get('account_alias', 'default'),
         'bundle_id': session.get('bundle_id'),
         'terminal_pid': session.get('terminal_pid'),
@@ -743,23 +831,45 @@ def get_all_session_summaries() -> List[Dict]:
     sessions = get_active_sessions()
     summaries = []
     for s in sessions:
-        summary = get_session_summary(s['session_id'])
-        if summary:
-            summaries.append(summary)
+        # For pending sessions (session_id is NULL), use pending_id for display
+        sid = s.get('session_id')
+        if sid:
+            summary = get_session_summary(sid)
+            if summary:
+                summaries.append(summary)
+        else:
+            # Pending session - create summary directly from session data
+            summaries.append({
+                'session_id': f"pending_{s.get('pending_id', '')}",
+                'project': s.get('project', ''),
+                'original_goal': s.get('original_goal', '等待输入...'),
+                'status': s.get('current_status', 'idle'),
+                'completed': s.get('completed_count', 0) or 0,
+                'total': s.get('total_count', 0) or 0,
+                'todos': [],
+                'pending_question': None,
+                'pending_options': [],
+                'timeline': [],
+                'last_activity': s.get('last_activity', ''),
+                'created_at': s.get('created_at', ''),
+                'account_alias': s.get('account_alias', 'default'),
+                'bundle_id': s.get('bundle_id'),
+                'terminal_pid': s.get('terminal_pid'),
+                'window_id': s.get('window_id'),
+                'round_count': 0
+            })
     return summaries
 
 
 def write_state_file_for_swift():
     """
     Write all session summaries to state file for Swift app to read.
-    Called periodically or after significant updates.
     """
     state_dir = Path.home() / '.claude-task-tracker' / 'state'
     state_dir.mkdir(parents=True, exist_ok=True)
 
     summaries = get_all_session_summaries()
 
-    # Write to all_sessions.json
     all_sessions_file = state_dir / 'all_sessions.json'
     with open(all_sessions_file, 'w') as f:
         json.dump({s['session_id']: s for s in summaries}, f, indent=2, ensure_ascii=False)

@@ -122,7 +122,7 @@ class SettingsManager {
 
 // MARK: - Settings Window Controller
 
-class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
+class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTextFieldDelegate {
 
     private var notificationStatusLabel: NSTextField!
     private var accessibilityStatusLabel: NSTextField!
@@ -155,9 +155,18 @@ class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
         window.center()
 
         self.init(window: window)
+        window.delegate = self
         setupUI()
         refreshStatus()
         loadSummarySettings()
+    }
+
+    // MARK: - NSWindowDelegate
+
+    func windowWillClose(_ notification: Notification) {
+        // Hide Dock icon when settings window closes
+        NSApp.setActivationPolicy(.accessory)
+        log("SETTINGS: Window closed, hiding Dock icon")
     }
 
     private func setupUI() {
