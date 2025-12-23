@@ -14,12 +14,14 @@ class SessionCardView: NSView {
     private let session: SessionInfo
     private var progress: ProgressInfo?
     private var roundCount: Int = 0
+    private var summaryMode: String?
 
     init(session: SessionInfo) {
         self.session = session
         super.init(frame: .zero)
         self.progress = DatabaseManager.shared.getProgress(sessionId: session.sessionId)
         self.roundCount = DatabaseManager.shared.getRoundCount(sessionId: session.sessionId)
+        self.summaryMode = DatabaseManager.shared.getSummaryMode(sessionId: session.sessionId)
         setupUI()
     }
 
@@ -52,11 +54,12 @@ class SessionCardView: NSView {
         projectLabel.frame = NSRect(x: 12, y: 72, width: 320, height: 16)
         addSubview(projectLabel)
 
-        // Line 3: [account][session_id] R{round} (y=54)
+        // Line 3: [mode][account][session_id] R{round} (y=54)
         let sessionPrefix = String(session.sessionId.prefix(4))
+        let modeTag = summaryMode != nil ? "[\(summaryMode!.uppercased())]" : ""
         let accountTag = session.accountAlias != "default" ? "[\(session.accountAlias)]" : ""
         let roundTag = roundCount > 0 ? " R\(roundCount)" : ""
-        let infoText = "\(accountTag)[\(sessionPrefix)]\(roundTag)"
+        let infoText = "\(modeTag)\(accountTag)[\(sessionPrefix)]\(roundTag)"
         let infoLabel = NSTextField(labelWithString: infoText)
         infoLabel.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
         infoLabel.textColor = .tertiaryLabelColor
@@ -79,12 +82,12 @@ class SessionCardView: NSView {
         timeLabel.frame = NSRect(x: 12, y: 12, width: 150, height: 16)
         addSubview(timeLabel)
 
-        // Jump button
-        let jumpButton = NSButton(title: "跳转", target: self, action: #selector(jumpToTerminal))
-        jumpButton.bezelStyle = .rounded
-        jumpButton.controlSize = .small
-        jumpButton.frame = NSRect(x: 280, y: 10, width: 52, height: 22)
-        addSubview(jumpButton)
+        // Detail button
+        let detailButton = NSButton(title: "详情", target: self, action: #selector(showDetail))
+        detailButton.bezelStyle = .rounded
+        detailButton.controlSize = .small
+        detailButton.frame = NSRect(x: 280, y: 10, width: 52, height: 22)
+        addSubview(detailButton)
 
         // Click gesture - use mouseDown override instead to avoid intercepting button clicks
     }
@@ -109,13 +112,13 @@ class SessionCardView: NSView {
     private func getStatusEmoji() -> String {
         switch session.currentStatus {
         case "waiting_for_user", "waiting_permission":
-            return "🔴"
+            return "🟠"  // 橙色，与 StatusBar 一致
         case "idle":
-            return "🟡"
+            return "⚪"  // 灰色，与 StatusBar 一致
         case "working", "executing_tool", "subagent_working":
-            return "🟢"
+            return "🟢"  // 绿色
         case "completed":
-            return "✅"
+            return "⚪"  // 灰色
         default:
             return "⚪"
         }
@@ -145,13 +148,13 @@ class SessionCardView: NSView {
     private func getStatusColor() -> NSColor {
         switch session.currentStatus {
         case "waiting_for_user", "waiting_permission":
-            return .systemOrange
+            return .systemOrange  // 橙色
         case "idle":
-            return .systemYellow
+            return .systemGray    // 灰色，与 StatusBar 一致
         case "working", "executing_tool", "subagent_working":
             return .systemGreen
         case "completed":
-            return .systemGray
+            return .tertiaryLabelColor  // 更淡的灰色
         default:
             return .secondaryLabelColor
         }
@@ -170,14 +173,13 @@ class SessionCardView: NSView {
             }
         }
 
-        // Otherwise, treat as card click
-        delegate?.sessionCardDidClick(session)
+        // Otherwise, jump to terminal
+        delegate?.sessionCardDidRequestJump(session)
     }
 
-    @objc private func jumpToTerminal() {
-        log("SESSIONCARD: jumpToTerminal clicked for session \(session.sessionId.prefix(8))")
-        log("SESSIONCARD: bundleId=\(session.bundleId ?? "nil") pid=\(session.terminalPid ?? 0) windowId=\(session.windowId ?? 0)")
-        delegate?.sessionCardDidRequestJump(session)
+    @objc private func showDetail() {
+        log("SESSIONCARD: showDetail clicked for session \(session.sessionId.prefix(8))")
+        delegate?.sessionCardDidClick(session)
     }
 
     // Hover effect

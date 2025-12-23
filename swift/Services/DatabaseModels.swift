@@ -17,6 +17,8 @@ struct SessionInfo {
     let windowId: UInt32?
     // Internal primary key for database operations
     let pk: Int?
+    // Summary mode from latest snapshot (ai/raw/nil)
+    let summaryMode: String?
 }
 
 struct ProgressInfo {

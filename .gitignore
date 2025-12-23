@@ -43,6 +43,14 @@ python_debug.log
 ~/.claude-hooks/
 .swiftpm/
 
+# Claude Code Runtime Files
+debug/
+projects/
+statsig/
+todos/
+shell-snapshots/
+.claude/
+
 # Installation Artifacts
 ClaudeMonitor.app/
 install_manifest.txt

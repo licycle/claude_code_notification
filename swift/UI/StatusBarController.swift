@@ -125,36 +125,49 @@ class StatusBarController: NSObject {
             // Use SF Symbols if available, fallback to emoji
             if #available(macOS 11.0, *) {
                 let symbolName: String
-                let color: NSColor
+                let bgColor: NSColor
 
                 switch status {
                 case .needsDecision:
-                    symbolName = "exclamationmark.circle.fill"
-                    color = .systemRed
+                    symbolName = "exclamationmark.circle"
+                    bgColor = .systemOrange
                 case .idle:
-                    symbolName = "pause.circle.fill"
-                    color = .systemYellow
+                    symbolName = "pause.circle"
+                    bgColor = .systemGray
                 case .working:
-                    symbolName = "play.circle.fill"
-                    color = .systemGreen
+                    symbolName = "play.circle"
+                    bgColor = .systemGreen
                 case .completed:
-                    symbolName = "checkmark.circle.fill"
-                    color = .systemGray
+                    symbolName = "checkmark.circle"
+                    bgColor = .systemGray.withAlphaComponent(0.6)
                 case .none:
                     symbolName = "circle"
-                    color = .systemGray
+                    bgColor = .clear
                 }
 
+                // Set button background color
+                button.wantsLayer = true
+                button.layer?.cornerRadius = 4
+                button.layer?.backgroundColor = bgColor.cgColor
+
+                // White icon
                 if let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: "Claude Monitor") {
-                    let config = NSImage.SymbolConfiguration(pointSize: 16, weight: .medium)
-                    let coloredImage = image.withSymbolConfiguration(config)
-                    button.image = coloredImage
-                    button.contentTintColor = color
+                    let sizeConfig = NSImage.SymbolConfiguration(pointSize: 14, weight: .medium)
+                    let colorConfig = NSImage.SymbolConfiguration(paletteColors: [.white])
+                    let config = sizeConfig.applying(colorConfig)
+                    if let configuredImage = image.withSymbolConfiguration(config) {
+                        configuredImage.isTemplate = false  // 不使用模板，保持白色
+                        button.image = configuredImage
+                    }
                 }
 
-                // Show count badge
+                // Show count badge (white text)
                 if count > 0 && status != .none {
-                    button.title = " \(count)"
+                    let attrString = NSAttributedString(
+                        string: " \(count)",
+                        attributes: [.foregroundColor: NSColor.white]
+                    )
+                    button.attributedTitle = attrString
                 } else {
                     button.title = ""
                 }

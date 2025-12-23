@@ -101,7 +101,8 @@ class DatabaseManager {
                     terminalPid: terminalPid,
                     shellPid: shellPid,
                     windowId: windowId,
-                    pk: pk
+                    pk: pk,
+                    summaryMode: nil
                 ))
             }
         }
@@ -161,7 +162,8 @@ class DatabaseManager {
                     terminalPid: terminalPid,
                     shellPid: shellPid,
                     windowId: windowId,
-                    pk: pk
+                    pk: pk,
+                    summaryMode: nil
                 ))
             }
         }
@@ -299,6 +301,61 @@ class DatabaseManager {
         let formatter = DateFormatter()
         formatter.dateFormat = "HH:mm"
         return formatter.string(from: date)
+    }
+
+    // MARK: - Summary Mode
+
+    func getSummaryMode(sessionId: String) -> String? {
+        guard openDatabase() else { return nil }
+        defer { closeDatabase() }
+
+        let query: String
+        let bindValue: String
+
+        if sessionId.hasPrefix("pending_") {
+            let pendingId = String(sessionId.dropFirst(8))
+            query = """
+                SELECT snap.summary_json
+                FROM snapshots snap
+                JOIN sessions s ON snap.session_pk = s.id
+                WHERE s.pending_id = ?
+                ORDER BY snap.created_at DESC
+                LIMIT 1
+                """
+            bindValue = pendingId
+        } else {
+            query = """
+                SELECT snap.summary_json
+                FROM snapshots snap
+                JOIN sessions s ON snap.session_pk = s.id
+                WHERE s.session_id = ?
+                ORDER BY snap.created_at DESC
+                LIMIT 1
+                """
+            bindValue = sessionId
+        }
+
+        var statement: OpaquePointer?
+        var result: String?
+
+        if sqlite3_prepare_v2(db, query, -1, &statement, nil) == SQLITE_OK {
+            sqlite3_bind_text(statement, 1, bindValue, -1, SQLITE_TRANSIENT)
+
+            if sqlite3_step(statement) == SQLITE_ROW {
+                if let jsonPtr = sqlite3_column_text(statement, 0) {
+                    let jsonStr = String(cString: jsonPtr)
+                    // Parse JSON to extract "mode" field
+                    if let data = jsonStr.data(using: .utf8),
+                       let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                       let mode = dict["mode"] as? String {
+                        result = mode
+                    }
+                }
+            }
+        }
+        sqlite3_finalize(statement)
+
+        return result
     }
 
     // MARK: - Relative Time

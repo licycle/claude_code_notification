@@ -46,7 +46,6 @@ extension DatabaseManager {
             sqlite3_bind_text(statement, 1, bindValue, -1, SQLITE_TRANSIENT)
 
             var lastEventTime: Date?
-            var consecutiveProgress = 0
             var lastCompletedCount = 0
             var lastStatus: String?
 
@@ -293,7 +292,8 @@ extension DatabaseManager {
                     terminalPid: terminalPid,
                     shellPid: shellPid,
                     windowId: windowId,
-                    pk: pk
+                    pk: pk,
+                    summaryMode: nil
                 )
             }
         }
@@ -367,12 +367,13 @@ extension DatabaseManager {
             }
         }
 
+        // Priority: needsDecision > working > idle > none
         if needsDecision > 0 {
             return (.needsDecision, needsDecision)
-        } else if idle > 0 {
-            return (.idle, idle)
         } else if working > 0 {
             return (.working, working)
+        } else if idle > 0 {
+            return (.idle, idle)
         } else {
             return (.none, sessions.count)
         }

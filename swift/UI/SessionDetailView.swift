@@ -30,6 +30,9 @@ class SessionDetailViewController: NSViewController {
     /// 会话摘要数据（包含 timeline 和 progress）
     private var summary: SessionSummary?
 
+    /// 会话模式（ai/raw）
+    private var summaryMode: String?
+
     // MARK: - Initialization
 
     init(session: SessionInfo) {
@@ -60,7 +63,8 @@ class SessionDetailViewController: NSViewController {
     /// 包括 timeline（时间线事件）和 progress（Todo 进度）
     private func loadData() {
         summary = DatabaseManager.shared.getSessionSummary(sessionId: session.sessionId)
-        log("DETAIL: Loaded summary for session \(session.sessionId), timeline count: \(summary?.timeline.count ?? 0)")
+        summaryMode = DatabaseManager.shared.getSummaryMode(sessionId: session.sessionId)
+        log("DETAIL: Loaded summary for session \(session.sessionId), timeline count: \(summary?.timeline.count ?? 0), mode: \(summaryMode ?? "nil")")
     }
 
     // MARK: - UI Setup
@@ -115,8 +119,9 @@ class SessionDetailViewController: NSViewController {
         backButton.frame = NSRect(x: 8, y: 12, width: 60, height: 28)
         header.addSubview(backButton)
 
-        // 任务标题（截取前25个字符）
-        let goalText = String(session.originalGoal.prefix(25))
+        // 任务标题（包含模式标记 + 截取目标）
+        let modeTag = summaryMode != nil ? "[\(summaryMode!.uppercased())] " : ""
+        let goalText = "\(modeTag)\(String(session.originalGoal.prefix(22)))"
         let titleLabel = NSTextField(labelWithString: goalText)
         titleLabel.font = NSFont.boldSystemFont(ofSize: 14)
         titleLabel.lineBreakMode = .byTruncatingTail
