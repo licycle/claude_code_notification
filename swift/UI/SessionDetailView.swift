@@ -370,11 +370,11 @@ class SessionDetailViewController: NSViewController {
             guard let self = self, let nodeView = nodeView else { return }
 
             if isHovering {
-                // 显示 popover
+                // 显示 popover（使用 fullDescription 显示完整内容）
                 self.showNodeDetail(
                     relativeTo: nodeView,
                     title: node.title,
-                    description: node.description
+                    description: node.fullDescription
                 )
             } else {
                 // 隐藏 popover

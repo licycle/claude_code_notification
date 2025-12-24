@@ -80,11 +80,13 @@ extension DatabaseManager {
                 case "goal_set":
                     let timeStr = formatTime(eventTime)
                     let desc = String(content.prefix(50))
+                    let fullDesc = content.isEmpty ? "任务开始" : content
                     node = TimelineNode(
                         time: timeStr,
                         type: "start",
                         title: "开始任务",
                         description: desc.isEmpty ? "任务开始" : desc,
+                        fullDescription: fullDesc,
                         status: "completed"
                     )
 
@@ -102,6 +104,7 @@ extension DatabaseManager {
                             type: "idle",
                             title: "空闲",
                             description: "等待新任务",
+                            fullDescription: "等待新任务",
                             status: "completed"
                         )
                     case "working":
@@ -110,6 +113,7 @@ extension DatabaseManager {
                             type: "working",
                             title: "工作中",
                             description: "正在执行任务",
+                            fullDescription: "正在执行任务",
                             status: "completed"
                         )
                     case "waiting_for_user":
@@ -118,6 +122,7 @@ extension DatabaseManager {
                             type: "waiting",
                             title: "等待决策",
                             description: "需要用户输入",
+                            fullDescription: "需要用户输入",
                             status: "current"
                         )
                     case "waiting_permission":
@@ -126,6 +131,7 @@ extension DatabaseManager {
                             type: "permission",
                             title: "等待权限",
                             description: "需要权限确认",
+                            fullDescription: "需要权限确认",
                             status: "current"
                         )
                     case "completed":
@@ -134,6 +140,7 @@ extension DatabaseManager {
                             type: "complete",
                             title: "任务完成",
                             description: "已完成全部步骤",
+                            fullDescription: "已完成全部步骤",
                             status: "completed"
                         )
                     case "rate_limited":
@@ -142,6 +149,7 @@ extension DatabaseManager {
                             type: "rate_limited",
                             title: "限流",
                             description: "API 请求受限",
+                            fullDescription: "API 请求受限",
                             status: "current"
                         )
                     default:
@@ -155,11 +163,13 @@ extension DatabaseManager {
 
                     // 每次进度更新都显示
                     if completed > lastCompletedCount {
+                        let desc = "已完成 \(completed)/\(total) 项"
                         node = TimelineNode(
                             time: timeStr,
                             type: "progress",
                             title: "进度更新",
-                            description: "已完成 \(completed)/\(total) 项",
+                            description: desc,
+                            fullDescription: desc,
                             status: completed == total && total > 0 ? "completed" : "current"
                         )
                     }
@@ -168,23 +178,42 @@ extension DatabaseManager {
                 case "user_input":
                     let timeStr = formatTime(eventTime)
                     let desc = String(content.prefix(50))
+                    let fullDesc = content.isEmpty ? "继续对话" : content
                     node = TimelineNode(
                         time: timeStr,
                         type: "input",
                         title: "用户输入",
                         description: desc.isEmpty ? "继续对话" : desc,
+                        fullDescription: fullDesc,
                         status: "completed"
                     )
 
                 case "ai_summary":
                     let timeStr = formatTime(eventTime)
-                    // Use current_task from metadata (if available) or content as fallback
-                    let currentTask = metadata["current_task"] as? String ?? content
+                    let currentTask = content.isEmpty ? (metadata["current_task"] as? String ?? "AI 分析") : content
+
+                    // 构建完整描述（用于 hover popover）
+                    var fullParts: [String] = []
+                    fullParts.append("当前任务: \(currentTask)")
+
+                    if let progress = metadata["progress_summary"] as? String, !progress.isEmpty {
+                        fullParts.append("进度: \(progress)")
+                    }
+                    if let nextStep = metadata["next_step"] as? String, !nextStep.isEmpty {
+                        fullParts.append("下一步: \(nextStep)")
+                    }
+                    if let pending = metadata["pending_decision"] as? String, !pending.isEmpty {
+                        fullParts.append("待决策: \(pending)")
+                    }
+
+                    let fullDesc = fullParts.joined(separator: "\n")
+
                     node = TimelineNode(
                         time: timeStr,
                         type: "ai_summary",
                         title: "AI 总结",
-                        description: currentTask.isEmpty ? "AI 分析" : currentTask,
+                        description: currentTask,
+                        fullDescription: fullDesc,
                         status: "completed"
                     )
 
@@ -208,6 +237,7 @@ extension DatabaseManager {
                 type: last.type,
                 title: last.title,
                 description: last.description,
+                fullDescription: last.fullDescription,
                 status: "current"
             )
         }

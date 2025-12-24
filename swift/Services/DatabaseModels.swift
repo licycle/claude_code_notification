@@ -37,7 +37,8 @@ struct TimelineNode {
     let time: String
     let type: String      // start/milestone/waiting/permission/complete
     let title: String
-    let description: String
+    let description: String       // 列表显示用（简短）
+    let fullDescription: String   // hover popover 显示用（完整）
     let status: String    // completed/current/pending
 }
 
