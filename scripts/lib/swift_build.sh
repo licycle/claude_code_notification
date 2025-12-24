@@ -5,7 +5,7 @@
 # ================= Swift Build Functions =================
 
 # Swift source files in compilation order
-SWIFT_FILES="Utils/Logger.swift Utils/PermissionManager.swift Services/DatabaseModels.swift Services/DatabaseManager.swift Services/DatabaseManager+Timeline.swift Services/SettingsManager.swift UI/SessionCardView.swift UI/SessionListView.swift UI/SessionDetailView.swift UI/StatusBarController.swift Core/AppDelegate.swift UI/SettingsWindow.swift Core/Main.swift"
+SWIFT_FILES="Utils/Logger.swift Utils/PermissionManager.swift Services/DatabaseModels.swift Services/DatabaseManager.swift Services/DatabaseManager+Timeline.swift Services/SettingsManager.swift UI/TimelineNodeDetailPopover.swift UI/SessionCardView.swift UI/SessionListView.swift UI/SessionDetailView.swift UI/StatusBarController.swift Core/AppDelegate.swift UI/SettingsWindow.swift Core/Main.swift"
 
 # Compile Swift application
 # Arguments: $1 = SWIFT_DIR, $2 = BINARY_PATH
@@ -29,6 +29,7 @@ compile_swift() {
         "$swift_dir/Services/DatabaseManager.swift" \
         "$swift_dir/Services/DatabaseManager+Timeline.swift" \
         "$swift_dir/Services/SettingsManager.swift" \
+        "$swift_dir/UI/TimelineNodeDetailPopover.swift" \
         "$swift_dir/UI/SessionCardView.swift" \
         "$swift_dir/UI/SessionListView.swift" \
         "$swift_dir/UI/SessionDetailView.swift" \

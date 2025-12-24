@@ -26,6 +26,9 @@ tracker_goal_hook = f"{base_dir}/task_tracker/hooks/goal_tracker.py"
 tracker_progress_hook = f"{base_dir}/task_tracker/hooks/progress_tracker.py"
 tracker_notification_hook = f"{base_dir}/task_tracker/hooks/notification_tracker.py"
 tracker_snapshot_hook = f"{base_dir}/task_tracker/hooks/snapshot_hook.py"
+tracker_permission_hook = f"{base_dir}/task_tracker/hooks/permission_tracker.py"
+tracker_pre_tool_hook = f"{base_dir}/task_tracker/hooks/pre_tool_tracker.py"
+tracker_subagent_hook = f"{base_dir}/task_tracker/hooks/subagent_tracker.py"
 
 hooks_config = {
     "UserPromptSubmit": [
@@ -33,10 +36,29 @@ hooks_config = {
             "hooks": [{"type": "command", "command": f"python3 {tracker_goal_hook}", "timeout": 5}]
         }
     ],
+    "PreToolUse": [
+        {
+            "hooks": [{"type": "command", "command": f"python3 {tracker_pre_tool_hook}", "timeout": 5}]
+        }
+    ],
     "PostToolUse": [
         {
-            "matcher": "TodoWrite|AskUserQuestion",
             "hooks": [{"type": "command", "command": f"python3 {tracker_progress_hook}", "timeout": 5}]
+        }
+    ],
+    "PermissionRequest": [
+        {
+            "hooks": [{"type": "command", "command": f"python3 {tracker_permission_hook}", "timeout": 5}]
+        }
+    ],
+    "SubagentStart": [
+        {
+            "hooks": [{"type": "command", "command": f"python3 {tracker_subagent_hook} start", "timeout": 5}]
+        }
+    ],
+    "SubagentStop": [
+        {
+            "hooks": [{"type": "command", "command": f"python3 {tracker_subagent_hook} stop", "timeout": 5}]
         }
     ],
     "Notification": [
@@ -97,6 +119,9 @@ install_task_tracker() {
     cp "$tracker_src/hooks/snapshot_hook.py" "$tracker_dir/hooks/"
     cp "$tracker_src/hooks/session_cleanup.py" "$tracker_dir/hooks/"
     cp "$tracker_src/hooks/session_init.py" "$tracker_dir/hooks/"
+    cp "$tracker_src/hooks/permission_tracker.py" "$tracker_dir/hooks/"
+    cp "$tracker_src/hooks/pre_tool_tracker.py" "$tracker_dir/hooks/"
+    cp "$tracker_src/hooks/subagent_tracker.py" "$tracker_dir/hooks/"
     cp "$tracker_src/hooks/__init__.py" "$tracker_dir/hooks/" 2>/dev/null || touch "$tracker_dir/hooks/__init__.py"
 
     # Make hooks executable
@@ -119,4 +144,27 @@ sys.path.insert(0, '$tracker_dir')
 from services.database import init_database
 init_database()
 " 2>/dev/null && return 0 || return 1
+}
+
+# Install CLI scripts (api_manager.py, account_manager.py)
+# Arguments: $1 = CLI_SRC, $2 = BASE_DIR
+install_cli_scripts() {
+    local cli_src="$1"
+    local base_dir="$2"
+
+    # Check required Python files
+    for pyfile in api_manager.py account_manager.py; do
+        if [ ! -f "$cli_src/$pyfile" ]; then
+            cecho "${RED}Error: $pyfile not found in $cli_src/${NC}"
+            return 1
+        fi
+    done
+
+    # Copy CLI Python scripts
+    cp "$cli_src/api_manager.py" "$base_dir/"
+    cp "$cli_src/account_manager.py" "$base_dir/"
+
+    chmod +x "$base_dir/"*.py
+    cecho "${GREEN}✅ CLI scripts installed${NC}"
+    return 0
 }
