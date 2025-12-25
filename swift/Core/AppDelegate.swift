@@ -12,6 +12,7 @@ func _AXUIElementGetWindow(_ element: AXUIElement, _ windowID: UnsafeMutablePoin
 class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
 
     var settingsWindowController: SettingsWindowController?
+    var managementWindowController: ManagementWindowController?
     var statusBarController: StatusBarController?
     var launchedFromNotification = false
 
@@ -44,6 +45,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             self,
             selector: #selector(handleJumpToTerminal(_:)),
             name: .jumpToTerminal,
+            object: nil
+        )
+
+        // Listen for management window requests
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleShowManagementWindow),
+            name: .showManagementWindow,
             object: nil
         )
 
@@ -97,6 +106,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
     @objc func handleShowSettingsWindow() {
         showSettingsWindow()
+    }
+
+    @objc func handleShowManagementWindow() {
+        showManagementWindow()
+    }
+
+    func showManagementWindow() {
+        NSApp.setActivationPolicy(.regular)
+        if managementWindowController == nil {
+            managementWindowController = ManagementWindowController()
+        }
+        managementWindowController?.showWindow(nil)
+        managementWindowController?.window?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     @objc func handleJumpToTerminal(_ notification: Notification) {

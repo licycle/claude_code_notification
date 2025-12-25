@@ -76,6 +76,27 @@ def cleanup_old_sessions(days: int = 7) -> int:
         return cursor.rowcount
 
 
+def cleanup_active_sessions_by_shell_pid(shell_pid: int) -> int:
+    """
+    Clean up all active sessions for a given shell_pid.
+    Called when a new Claude Code instance starts in the same shell.
+    This ensures old sessions are marked as completed before creating new ones.
+
+    Returns:
+        Number of sessions cleaned up
+    """
+    now = datetime.now().isoformat()
+    with get_connection() as conn:
+        cursor = conn.execute(
+            """UPDATE sessions
+               SET current_status = 'completed', last_activity = ?
+               WHERE shell_pid = ?
+               AND current_status != 'completed'""",
+            (now, shell_pid)
+        )
+        return cursor.rowcount
+
+
 # ============================================================================
 # Pending Session Support (for pre-prompt idle state)
 # ============================================================================
@@ -297,6 +318,7 @@ __all__ = [
     'get_latest_snapshot',
     'mark_session_completed',
     'cleanup_old_sessions',
+    'cleanup_active_sessions_by_shell_pid',
     'create_pending_session',
     'link_pending_session',
     'get_pending_session_by_project',

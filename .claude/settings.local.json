@@ -72,7 +72,8 @@
       "Bash(swift/UI/SessionCardView.swift )",
       "Bash(swift/UI/SessionListView.swift )",
       "Bash(swift/UI/SessionDetailView.swift )",
-      "Bash(claude-ac rm:*)"
+      "Bash(claude-ac rm:*)",
+      "Bash(lsof:*)"
     ]
   }
 }

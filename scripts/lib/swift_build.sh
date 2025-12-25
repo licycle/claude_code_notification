@@ -5,7 +5,7 @@
 # ================= Swift Build Functions =================
 
 # Swift source files in compilation order
-SWIFT_FILES="Utils/Logger.swift Utils/PermissionManager.swift Services/DatabaseModels.swift Services/DatabaseManager.swift Services/DatabaseManager+Timeline.swift Services/SettingsManager.swift UI/TimelineNodeDetailPopover.swift UI/SessionCardView.swift UI/SessionListView.swift UI/SessionDetailView.swift UI/StatusBarController.swift Core/AppDelegate.swift UI/SettingsWindow.swift Core/Main.swift"
+SWIFT_FILES="Utils/Logger.swift Utils/PermissionManager.swift Services/DatabaseModels.swift Services/DatabaseManager.swift Services/DatabaseManager+Timeline.swift Services/DatabaseManager+Reports.swift Services/SettingsManager.swift UI/Management/TaskCenter/TaskFilterBar.swift UI/Management/Reports/DailyReportView.swift UI/Management/TaskCenter/TaskCenterViewController.swift UI/Management/Reports/ReportsViewController.swift UI/Management/SidebarViewController.swift UI/Management/ManagementMainViewController.swift UI/Management/ManagementWindowController.swift UI/TimelineNodeDetailPopover.swift UI/SessionCardView.swift UI/SessionListView.swift UI/SessionDetailView.swift UI/StatusBarController.swift Core/AppDelegate.swift UI/SettingsWindow.swift Core/Main.swift"
 
 # Compile Swift application
 # Arguments: $1 = SWIFT_DIR, $2 = BINARY_PATH
@@ -28,7 +28,15 @@ compile_swift() {
         "$swift_dir/Services/DatabaseModels.swift" \
         "$swift_dir/Services/DatabaseManager.swift" \
         "$swift_dir/Services/DatabaseManager+Timeline.swift" \
+        "$swift_dir/Services/DatabaseManager+Reports.swift" \
         "$swift_dir/Services/SettingsManager.swift" \
+        "$swift_dir/UI/Management/TaskCenter/TaskFilterBar.swift" \
+        "$swift_dir/UI/Management/Reports/DailyReportView.swift" \
+        "$swift_dir/UI/Management/TaskCenter/TaskCenterViewController.swift" \
+        "$swift_dir/UI/Management/Reports/ReportsViewController.swift" \
+        "$swift_dir/UI/Management/SidebarViewController.swift" \
+        "$swift_dir/UI/Management/ManagementMainViewController.swift" \
+        "$swift_dir/UI/Management/ManagementWindowController.swift" \
         "$swift_dir/UI/TimelineNodeDetailPopover.swift" \
         "$swift_dir/UI/SessionCardView.swift" \
         "$swift_dir/UI/SessionListView.swift" \

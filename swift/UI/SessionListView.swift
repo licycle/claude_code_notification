@@ -86,12 +86,17 @@ class SessionListViewController: NSViewController {
 
         let cleanupButton = NSButton(title: "清理无效", target: self, action: #selector(forceCleanup))
         cleanupButton.bezelStyle = .rounded
-        cleanupButton.frame = NSRect(x: 12, y: 10, width: 80, height: 30)
+        cleanupButton.frame = NSRect(x: 12, y: 10, width: 70, height: 30)
         footer.addSubview(cleanupButton)
+
+        let managementButton = NSButton(title: "管理中心", target: self, action: #selector(openManagement))
+        managementButton.bezelStyle = .rounded
+        managementButton.frame = NSRect(x: 140, y: 10, width: 80, height: 30)
+        footer.addSubview(managementButton)
 
         let refreshButton = NSButton(title: "刷新", target: self, action: #selector(refreshTapped))
         refreshButton.bezelStyle = .rounded
-        refreshButton.frame = NSRect(x: 260, y: 10, width: 80, height: 30)
+        refreshButton.frame = NSRect(x: 280, y: 10, width: 60, height: 30)
         footer.addSubview(refreshButton)
 
         return footer
@@ -101,6 +106,10 @@ class SessionListViewController: NSViewController {
 
     @objc func openSettings() {
         delegate?.sessionListDidRequestSettings()
+    }
+
+    @objc func openManagement() {
+        NotificationCenter.default.post(name: .showManagementWindow, object: nil)
     }
 
     @objc func forceCleanup() {

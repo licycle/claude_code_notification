@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from utils import read_hook_input, write_hook_output, log, get_project_name, get_env_info
 from services.database import (
     get_session, create_session, add_timeline_event, resolve_pending_decisions,
-    update_session_status, link_pending_session
+    update_session_status, link_pending_session, update_session_shell_pid
 )
 
 
@@ -70,6 +70,7 @@ def main():
         # Get window info for terminal jumping
         env_info = get_env_info()
         terminal_pid = int(env_info.get('pid', 0)) or None
+        shell_pid = int(env_info.get('shell_pid', 0)) or None
         window_id = int(env_info.get('window_id', 0)) or None
 
         create_session(
@@ -79,6 +80,7 @@ def main():
             account_alias=env_info.get('account_alias', 'default'),
             bundle_id=env_info.get('bundle_id'),
             terminal_pid=terminal_pid,
+            shell_pid=shell_pid,
             window_id=window_id,
             initial_status='working'  # User submitted prompt, so working
         )
@@ -87,6 +89,12 @@ def main():
         # Existing session - record as user input event
         current_status = session.get('current_status', 'idle')
         log("GOAL", f"Existing session (status: {current_status}), recording user input")
+
+        # Update shell_pid for terminal switching support
+        env_info = get_env_info()
+        shell_pid = int(env_info.get('shell_pid', 0)) or None
+        if shell_pid:
+            update_session_shell_pid(session_id, shell_pid)
 
         # Mark any pending decisions as resolved (user responded)
         resolve_pending_decisions(session_id)

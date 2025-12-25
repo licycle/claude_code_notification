@@ -1,5 +1,11 @@
 import Foundation
 
+// MARK: - Notification Names
+
+extension Notification.Name {
+    static let showManagementWindow = Notification.Name("showManagementWindow")
+}
+
 // MARK: - Data Models
 
 struct SessionInfo {

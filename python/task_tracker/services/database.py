@@ -222,6 +222,17 @@ def update_session_status(session_id: str, status: str) -> None:
         )
 
 
+def update_session_shell_pid(session_id: str, shell_pid: int) -> None:
+    """Update session's shell_pid for terminal switching support"""
+    now = datetime.now().isoformat()
+    with get_connection() as conn:
+        conn.execute(
+            """UPDATE sessions SET shell_pid = ?, last_activity = ?
+               WHERE session_id = ?""",
+            (shell_pid, now, session_id)
+        )
+
+
 # ============================================================================
 # Progress Operations
 # ============================================================================
@@ -364,6 +375,7 @@ from .db_pending import (
     get_latest_snapshot,
     mark_session_completed,
     cleanup_old_sessions,
+    cleanup_active_sessions_by_shell_pid,
     create_pending_session,
     link_pending_session,
     get_pending_session_by_project,
@@ -382,6 +394,7 @@ __all__ = [
     'get_session_pk',
     'create_session',
     'update_session_status',
+    'update_session_shell_pid',
     # Progress
     'update_progress',
     'get_progress',
@@ -402,6 +415,7 @@ __all__ = [
     'get_latest_snapshot',
     'mark_session_completed',
     'cleanup_old_sessions',
+    'cleanup_active_sessions_by_shell_pid',
     'create_pending_session',
     'link_pending_session',
     'get_pending_session_by_project',

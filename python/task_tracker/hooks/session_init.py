@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent))
 
 from utils import log, get_env_info
-from services.database import create_pending_session
+from services.database import create_pending_session, cleanup_active_sessions_by_shell_pid
 
 
 def main():
@@ -37,6 +37,12 @@ def main():
     shell_pid = int(env_info.get('shell_pid', 0)) or None
     window_id = int(env_info.get('window_id', 0)) or None
     account_alias = env_info.get('account_alias', 'default')
+
+    # Clean up old active sessions for this shell before creating new one
+    if shell_pid:
+        cleaned = cleanup_active_sessions_by_shell_pid(shell_pid)
+        if cleaned > 0:
+            log("SESSION_INIT", f"Cleaned up {cleaned} old session(s) for shell_pid={shell_pid}")
 
     # Create pending session
     create_pending_session(
