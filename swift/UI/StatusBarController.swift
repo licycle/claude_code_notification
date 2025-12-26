@@ -69,8 +69,8 @@ class StatusBarController: NSObject {
     }
 
     private func startCleanupTimer() {
-        // Cleanup dead sessions every 5 minutes
-        cleanupTimer = Timer.scheduledTimer(withTimeInterval: 300.0, repeats: true) { [weak self] _ in
+        // Cleanup dead sessions every 30 seconds
+        cleanupTimer = Timer.scheduledTimer(withTimeInterval: 30.0, repeats: true) { [weak self] _ in
             self?.cleanupDeadSessions()
         }
         // Run immediately at startup to recover/cleanup sessions
@@ -228,4 +228,5 @@ extension StatusBarController: SessionDetailViewControllerDelegate {
 extension Notification.Name {
     static let showSettingsWindow = Notification.Name("showSettingsWindow")
     static let jumpToTerminal = Notification.Name("jumpToTerminal")
+    static let showSessionDetail = Notification.Name("showSessionDetail")
 }

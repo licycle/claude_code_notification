@@ -428,7 +428,11 @@ extension DatabaseManager {
     /// - Returns: Number of sessions cleaned up
     @discardableResult
     func cleanupDeadSessions() -> Int {
-        guard openDatabase() else { return 0 }
+        log("CLEANUP: cleanupDeadSessions() called")
+        guard openDatabase() else {
+            log("CLEANUP: Failed to open database")
+            return 0
+        }
         defer { closeDatabase() }
 
         // Query all active sessions with shell_pid
@@ -449,15 +453,21 @@ extension DatabaseManager {
                 let pid = sqlite3_column_int(statement, 1)
 
                 // Check if process is alive (kill with signal 0 only checks, doesn't send signal)
-                if kill(pid, 0) != 0 {
+                let killResult = kill(pid, 0)
+                let currentErrno = errno
+                log("CLEANUP: Checking pk=\(pk) pid=\(pid) kill_result=\(killResult) errno=\(currentErrno)")
+
+                if killResult != 0 {
                     // Process doesn't exist (errno == ESRCH) or no permission (errno == EPERM)
                     // EPERM means process exists but belongs to another user, don't clean up
-                    if errno == ESRCH {
+                    if currentErrno == ESRCH {
                         deadSessions.append(pk)
                         log("CLEANUP: Session pk=\(pk) has dead shell PID \(pid)")
                     }
                 }
             }
+        } else {
+            log("CLEANUP: SQL prepare failed")
         }
         sqlite3_finalize(statement)
 

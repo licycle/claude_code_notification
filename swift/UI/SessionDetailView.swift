@@ -556,7 +556,7 @@ class SessionDetailViewController: NSViewController {
         if let timeline = summary?.timeline, !timeline.isEmpty {
             text += "\n时间线:\n"
             for node in timeline {
-                text += "  \(node.time) \(node.title): \(node.description)\n"
+                text += "  \(node.time) \(node.title): \(node.fullDescription)\n"
             }
         }
 

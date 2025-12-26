@@ -8,6 +8,9 @@ Claude Monitor 是一个 macOS 原生应用，为 Claude Code 提供桌面通知
 
 ## 开发规范
 1. 功能需要编译测试,但是不需要部署,用户自行部署即可
+2. 使用install.sh -a 进行纯swift app测试
+3. 使用install.sh -p 进行纯python hook测试
+4. 使用uninstall_monitor.sh , 然后install.sh 进行完全脚本替换测试
 
 ## 架构设计
 

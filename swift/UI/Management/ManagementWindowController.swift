@@ -8,14 +8,14 @@ class ManagementWindowController: NSWindowController {
 
     convenience init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 900, height: 600),
+            contentRect: NSRect(x: 0, y: 0, width:1100, height: 650),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
         )
 
-        window.title = "Claude Monitor - 管理中心"
-        window.minSize = NSSize(width: 800, height: 500)
+        window.title = "Claude Monitor - Management Center"
+        window.minSize = NSSize(width: 1050, height: 550)
         window.center()
 
         // Set window appearance

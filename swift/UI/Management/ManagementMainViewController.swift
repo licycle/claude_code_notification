@@ -33,10 +33,11 @@ class ManagementMainViewController: NSViewController {
     private var currentContentViewController: NSViewController?
 
     private var taskCenterViewController: TaskCenterViewController?
+    private var taskCenterDetailViewController: TaskCenterDetailViewController?
     private var reportsViewController: ReportsViewController?
 
     override func loadView() {
-        view = NSView(frame: NSRect(x: 0, y: 0, width: 900, height: 600))
+        view = NSView(frame: NSRect(x: 0, y: 0, width: 1050, height: 650))
         view.wantsLayer = true
     }
 
@@ -102,6 +103,7 @@ class ManagementMainViewController: NSViewController {
         case .taskCenter:
             if taskCenterViewController == nil {
                 taskCenterViewController = TaskCenterViewController()
+                taskCenterViewController?.delegate = self
             }
             newViewController = taskCenterViewController!
 
@@ -143,5 +145,59 @@ class ManagementMainViewController: NSViewController {
 extension ManagementMainViewController: SidebarViewControllerDelegate {
     func sidebarDidSelectItem(_ item: NavigationItem) {
         showContent(for: item)
+    }
+}
+
+// MARK: - TaskCenter Delegate
+
+extension ManagementMainViewController: TaskCenterViewControllerDelegate {
+    func taskCenterDidRequestShowDetail(_ session: SessionInfo) {
+        showTaskCenterDetail(session: session)
+    }
+
+    private func showTaskCenterDetail(session: SessionInfo) {
+        // Remove current content
+        currentContentViewController?.view.removeFromSuperview()
+        currentContentViewController?.removeFromParent()
+
+        // Create detail view controller
+        let detailVC = TaskCenterDetailViewController(session: session)
+        detailVC.delegate = self
+        taskCenterDetailViewController = detailVC
+
+        // Add to view
+        addChild(detailVC)
+        detailVC.view.translatesAutoresizingMaskIntoConstraints = false
+        contentContainerView.addSubview(detailVC.view)
+
+        NSLayoutConstraint.activate([
+            detailVC.view.leadingAnchor.constraint(equalTo: contentContainerView.leadingAnchor),
+            detailVC.view.trailingAnchor.constraint(equalTo: contentContainerView.trailingAnchor),
+            detailVC.view.topAnchor.constraint(equalTo: contentContainerView.topAnchor),
+            detailVC.view.bottomAnchor.constraint(equalTo: contentContainerView.bottomAnchor)
+        ])
+
+        currentContentViewController = detailVC
+    }
+}
+
+// MARK: - TaskCenterDetail Delegate
+
+extension ManagementMainViewController: TaskCenterDetailViewControllerDelegate {
+    func taskCenterDetailDidRequestBack() {
+        taskCenterDetailViewController = nil
+        showContent(for: .taskCenter)
+    }
+
+    func taskCenterDetailDidRequestJump(_ session: SessionInfo) {
+        NotificationCenter.default.post(
+            name: .jumpToTerminal,
+            object: nil,
+            userInfo: [
+                "bundleId": session.bundleId ?? "com.apple.Terminal",
+                "terminalPid": session.terminalPid ?? 0,
+                "windowId": session.windowId ?? 0
+            ]
+        )
     }
 }

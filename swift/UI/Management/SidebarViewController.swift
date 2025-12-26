@@ -43,8 +43,8 @@ class SidebarViewController: NSViewController {
         stackView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(stackView)
 
-        // Create navigation buttons
-        for item in NavigationItem.allCases {
+        // Create navigation buttons (skip reports for now)
+        for item in NavigationItem.allCases where item != .reports {
             let button = createNavButton(for: item)
             buttons.append(button)
             stackView.addArrangedSubview(button)

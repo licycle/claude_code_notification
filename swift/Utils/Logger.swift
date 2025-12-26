@@ -4,8 +4,16 @@ import Foundation
 
 let logPath = NSString(string: "~/.claude-hooks/swift_debug.log").expandingTildeInPath
 
+// 使用本地时区的日期格式化器
+private let logDateFormatter: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+    formatter.timeZone = TimeZone.current
+    return formatter
+}()
+
 func log(_ msg: String) {
-    let ts = ISO8601DateFormatter().string(from: Date())
+    let ts = logDateFormatter.string(from: Date())
     let entry = "[\(ts)] \(msg)\n"
     if let data = entry.data(using: .utf8) {
         if let fileHandle = FileHandle(forWritingAtPath: logPath) {

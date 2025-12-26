@@ -73,7 +73,15 @@
       "Bash(swift/UI/SessionListView.swift )",
       "Bash(swift/UI/SessionDetailView.swift )",
       "Bash(claude-ac rm:*)",
-      "Bash(lsof:*)"
+      "Bash(lsof:*)",
+      "Bash(for pid in 31943 13176)",
+      "Bash(do)",
+      "Bash(if kill -0 $pid)",
+      "Bash(then)",
+      "Bash(else)",
+      "Bash(for pid in 39535 31943)",
+      "Bash(if ps -p $pid)",
+      "Bash(./scripts/lib/swift_build.sh:*)"
     ]
   }
 }

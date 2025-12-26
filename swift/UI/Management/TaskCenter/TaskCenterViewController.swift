@@ -1,8 +1,16 @@
 import AppKit
 
+// MARK: - Task Center View Controller Delegate
+
+protocol TaskCenterViewControllerDelegate: AnyObject {
+    func taskCenterDidRequestShowDetail(_ session: SessionInfo)
+}
+
 // MARK: - Task Center View Controller
 
 class TaskCenterViewController: NSViewController {
+
+    weak var delegate: TaskCenterViewControllerDelegate?
 
     private var filterBar: TaskFilterBar!
     private var tableView: NSTableView!
@@ -23,15 +31,21 @@ class TaskCenterViewController: NSViewController {
     private let colStatus = NSUserInterfaceItemIdentifier("status")
     private let colProject = NSUserInterfaceItemIdentifier("project")
     private let colTime = NSUserInterfaceItemIdentifier("time")
+    private let colAction = NSUserInterfaceItemIdentifier("action")
+
+    // Hover popover
+    private var currentPopover: NSPopover?
+    private var hoverRow: Int = -1
 
     override func loadView() {
-        view = NSView(frame: NSRect(x: 0, y: 0, width: 720, height: 600))
+        view = NSView(frame: NSRect(x: 0, y: 0, width: 920, height: 650))
         view.wantsLayer = true
     }
 
     override func viewDidLoad() {
         super.viewDidLoad()
         setupUI()
+        setupHoverTracking()
         loadData()
     }
 
@@ -85,22 +99,24 @@ class TaskCenterViewController: NSViewController {
         tableView.doubleAction = #selector(tableDoubleClicked(_:))
         tableView.target = self
 
-        // Add columns
-        addColumn(id: colMode, title: "模式", width: 50)
+        // Add columns - Goal/Project 150px, others 80px
+        addColumn(id: colMode, title: "Account", width: 80)
         addColumn(id: colSessionId, title: "Session ID", width: 80)
-        addColumn(id: colGoal, title: "目标", width: 200)
-        addColumn(id: colStatus, title: "状态", width: 80)
-        addColumn(id: colProject, title: "项目", width: 150)
-        addColumn(id: colTime, title: "更新时间", width: 100)
+        addColumn(id: colGoal, title: "Goal", width: 150)
+        addColumn(id: colStatus, title: "Status", width: 100)
+        addColumn(id: colProject, title: "Project", width: 150)
+        addColumn(id: colTime, title: "Updated", width: 80)
+        addColumn(id: colAction, title: "Action", width: 80)
 
         scrollView.documentView = tableView
 
         // Context menu
         let menu = NSMenu()
-        menu.addItem(NSMenuItem(title: "跳转终端", action: #selector(jumpToTerminal(_:)), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "View Details", action: #selector(showDetail(_:)), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Jump to Terminal", action: #selector(jumpToTerminal(_:)), keyEquivalent: ""))
         menu.addItem(NSMenuItem.separator())
-        menu.addItem(NSMenuItem(title: "标记完成", action: #selector(markCompleted(_:)), keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "删除", action: #selector(deleteSession(_:)), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Mark Completed", action: #selector(markCompleted(_:)), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Delete", action: #selector(deleteSession(_:)), keyEquivalent: ""))
         tableView.menu = menu
     }
 
@@ -108,7 +124,8 @@ class TaskCenterViewController: NSViewController {
         let column = NSTableColumn(identifier: id)
         column.title = title
         column.width = width
-        column.minWidth = 40
+        column.minWidth = 50
+        column.maxWidth = width
         tableView.addTableColumn(column)
     }
 
@@ -161,7 +178,7 @@ class TaskCenterViewController: NSViewController {
     }
 
     private func updateStatusLabel() {
-        statusLabel.stringValue = "共 \(filteredSessions.count) 个会话（总计 \(sessions.count) 个）"
+        statusLabel.stringValue = "\(filteredSessions.count) sessions (total \(sessions.count))"
     }
 
     // MARK: - Actions
@@ -169,13 +186,32 @@ class TaskCenterViewController: NSViewController {
     @objc private func tableDoubleClicked(_ sender: Any) {
         let row = tableView.clickedRow
         guard row >= 0 && row < filteredSessions.count else { return }
-        jumpToTerminalForSession(filteredSessions[row])
+        let session = filteredSessions[row]
+        // 只有非完成状态才能跳转
+        if session.currentStatus != "completed" {
+            jumpToTerminalForSession(session)
+        }
     }
 
     @objc private func jumpToTerminal(_ sender: Any) {
         let row = tableView.clickedRow
         guard row >= 0 && row < filteredSessions.count else { return }
-        jumpToTerminalForSession(filteredSessions[row])
+        let session = filteredSessions[row]
+        // 只有非完成状态才能跳转
+        if session.currentStatus != "completed" {
+            jumpToTerminalForSession(session)
+        }
+    }
+
+    @objc private func showDetail(_ sender: Any) {
+        let row = tableView.clickedRow
+        guard row >= 0 && row < filteredSessions.count else { return }
+        let session = filteredSessions[row]
+        NotificationCenter.default.post(
+            name: .showSessionDetail,
+            object: nil,
+            userInfo: ["session": session]
+        )
     }
 
     private func jumpToTerminalForSession(_ session: SessionInfo) {
@@ -205,11 +241,11 @@ class TaskCenterViewController: NSViewController {
         guard !rows.isEmpty else { return }
 
         let alert = NSAlert()
-        alert.messageText = "确认删除"
-        alert.informativeText = "确定要删除选中的 \(rows.count) 个会话吗？此操作不可撤销。"
+        alert.messageText = "Confirm Delete"
+        alert.informativeText = "Are you sure you want to delete \(rows.count) session(s)? This action cannot be undone."
         alert.alertStyle = .warning
-        alert.addButton(withTitle: "删除")
-        alert.addButton(withTitle: "取消")
+        alert.addButton(withTitle: "Delete")
+        alert.addButton(withTitle: "Cancel")
 
         if alert.runModal() == .alertFirstButtonReturn {
             for row in rows.reversed() {
@@ -247,12 +283,16 @@ extension TaskCenterViewController: NSTableViewDelegate {
         switch column.identifier {
         case colMode:
             let mode = DatabaseManager.shared.getSummaryMode(sessionId: session.sessionId)
-            cell.stringValue = mode == "ai" ? "🤖" : "📝"
-            cell.alignment = .center
+            let modeText = mode == "ai" ? "[AI]" : "[RAW]"
+            let accountText = session.accountAlias.isEmpty ? "" : "[\(session.accountAlias)]"
+            cell.stringValue = "\(accountText)\(modeText)"
+            cell.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+            cell.toolTip = "Account: \(session.accountAlias.isEmpty ? "default" : session.accountAlias)\nMode: \(mode == "ai" ? "AI Summary" : "Raw")"
 
         case colSessionId:
             cell.stringValue = String(session.sessionId.prefix(8))
             cell.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+            cell.toolTip = session.sessionId
 
         case colGoal:
             cell.stringValue = session.originalGoal
@@ -261,6 +301,7 @@ extension TaskCenterViewController: NSTableViewDelegate {
         case colStatus:
             cell.stringValue = statusText(for: session.currentStatus)
             cell.textColor = statusColor(for: session.currentStatus)
+            cell.toolTip = "Status: \(session.currentStatus)"
 
         case colProject:
             cell.stringValue = shortenPath(session.project)
@@ -269,6 +310,22 @@ extension TaskCenterViewController: NSTableViewDelegate {
         case colTime:
             cell.stringValue = relativeTime(from: session.lastActivity)
             cell.textColor = .secondaryLabelColor
+            let formatter = DateFormatter()
+            formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+            cell.toolTip = formatter.string(from: session.lastActivity)
+
+        case colAction:
+            // 返回按钮而不是文本框
+            let buttonId = NSUserInterfaceItemIdentifier("ActionButton")
+            let button = tableView.makeView(withIdentifier: buttonId, owner: nil) as? NSButton
+                ?? NSButton(title: "详情", target: self, action: #selector(detailButtonClicked(_:)))
+            button.identifier = buttonId
+            button.title = "详情"
+            button.bezelStyle = .inline
+            button.tag = row
+            button.target = self
+            button.action = #selector(detailButtonClicked(_:))
+            return button
 
         default:
             break
@@ -277,13 +334,20 @@ extension TaskCenterViewController: NSTableViewDelegate {
         return cell
     }
 
+    @objc private func detailButtonClicked(_ sender: NSButton) {
+        let row = sender.tag
+        guard row >= 0 && row < filteredSessions.count else { return }
+        let session = filteredSessions[row]
+        delegate?.taskCenterDidRequestShowDetail(session)
+    }
+
     private func statusText(for status: String) -> String {
         switch status {
-        case "working", "executing_tool", "subagent_working": return "🟢 工作中"
-        case "idle": return "🟡 空闲"
-        case "waiting_for_user": return "🔴 等待决策"
-        case "waiting_permission": return "🔐 等待权限"
-        case "completed": return "✅ 已完成"
+        case "working", "executing_tool", "subagent_working": return "🟢 Working"
+        case "idle": return "🟡 Idle"
+        case "waiting_for_user": return "🔴 Waiting"
+        case "waiting_permission": return "🔐 Permission"
+        case "completed": return "✅ Completed"
         default: return status
         }
     }
@@ -312,10 +376,10 @@ extension TaskCenterViewController: NSTableViewDelegate {
 
     private func relativeTime(from date: Date) -> String {
         let interval = Date().timeIntervalSince(date)
-        if interval < 60 { return "刚刚" }
-        if interval < 3600 { return "\(Int(interval / 60))分钟前" }
-        if interval < 86400 { return "\(Int(interval / 3600))小时前" }
-        return "\(Int(interval / 86400))天前"
+        if interval < 60 { return "Just now" }
+        if interval < 3600 { return "\(Int(interval / 60))m ago" }
+        if interval < 86400 { return "\(Int(interval / 3600))h ago" }
+        return "\(Int(interval / 86400))d ago"
     }
 }
 
@@ -339,5 +403,87 @@ extension TaskCenterViewController: TaskFilterBarDelegate {
 
     func filterBarDidRequestRefresh() {
         refresh()
+    }
+}
+
+// MARK: - Hover Popover
+
+extension TaskCenterViewController {
+    func setupHoverTracking() {
+        let trackingArea = NSTrackingArea(
+            rect: tableView.bounds,
+            options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        tableView.addTrackingArea(trackingArea)
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        let locationInWindow = event.locationInWindow
+        let locationInTable = tableView.convert(locationInWindow, from: nil)
+        let row = tableView.row(at: locationInTable)
+        let column = tableView.column(at: locationInTable)
+
+        // Check if hovering over Goal or Project column
+        guard row >= 0 && row < filteredSessions.count,
+              column >= 0,
+              (tableView.tableColumns[column].identifier == colGoal ||
+               tableView.tableColumns[column].identifier == colProject) else {
+            closePopover()
+            hoverRow = -1
+            return
+        }
+
+        // Don't show again for same row
+        if row == hoverRow { return }
+        hoverRow = row
+
+        // Show popover with appropriate content
+        let session = filteredSessions[row]
+        let cellRect = tableView.frameOfCell(atColumn: column, row: row)
+        let content = tableView.tableColumns[column].identifier == colGoal
+            ? session.originalGoal
+            : session.project
+        showGoalPopover(goal: content, relativeTo: cellRect)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        closePopover()
+        hoverRow = -1
+    }
+
+    private func showGoalPopover(goal: String, relativeTo rect: NSRect) {
+        closePopover()
+
+        let popover = NSPopover()
+        popover.behavior = .semitransient
+
+        // 创建可滚动的文本视图
+        let textView = NSTextView(frame: NSRect(x: 0, y: 0, width: 280, height: 130))
+        textView.string = goal
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.backgroundColor = .clear
+        textView.font = NSFont.systemFont(ofSize: 12)
+        textView.textContainerInset = NSSize(width: 8, height: 8)
+
+        let scrollView = NSScrollView(frame: NSRect(x: 0, y: 0, width: 300, height: 150))
+        scrollView.documentView = textView
+        scrollView.hasVerticalScroller = true
+        scrollView.autohidesScrollers = true
+        scrollView.drawsBackground = false
+
+        let vc = NSViewController()
+        vc.view = scrollView
+        popover.contentViewController = vc
+        popover.show(relativeTo: rect, of: tableView, preferredEdge: .maxY)
+
+        currentPopover = popover
+    }
+
+    private func closePopover() {
+        currentPopover?.close()
+        currentPopover = nil
     }
 }
