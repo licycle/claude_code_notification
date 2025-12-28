@@ -83,7 +83,7 @@ class SessionCardView: NSView {
         addSubview(timeLabel)
 
         // Detail button
-        let detailButton = NSButton(title: "详情", target: self, action: #selector(showDetail))
+        let detailButton = NSButton(title: L(.session_card_detail), target: self, action: #selector(showDetail))
         detailButton.bezelStyle = .rounded
         detailButton.controlSize = .small
         detailButton.frame = NSRect(x: 280, y: 10, width: 52, height: 22)
@@ -127,19 +127,19 @@ class SessionCardView: NSView {
     private func getStatusText() -> String {
         switch session.currentStatus {
         case "waiting_for_user":
-            return "⚠️ 等待决策"
+            return "⚠️ " + L(.status_waiting_decision)
         case "waiting_permission":
-            return "🔐 等待权限"
+            return "🔐 " + L(.status_waiting_permission)
         case "idle":
-            return "💤 空闲中"
+            return "💤 " + L(.status_idle)
         case "working":
-            return "🔄 运行中"
+            return "🔄 " + L(.status_working)
         case "executing_tool":
-            return "🔧 执行工具"
+            return "🔧 " + L(.status_executing_tool)
         case "subagent_working":
-            return "🤖 子代理"
+            return "🤖 " + L(.status_subagent)
         case "completed":
-            return "✅ 已完成"
+            return "✅ " + L(.status_completed)
         default:
             return session.currentStatus
         }

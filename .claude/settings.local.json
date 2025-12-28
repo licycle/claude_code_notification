@@ -83,5 +83,9 @@
       "Bash(if ps -p $pid)",
       "Bash(./scripts/lib/swift_build.sh:*)"
     ]
+  },
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true
   }
 }

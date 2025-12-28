@@ -291,3 +291,92 @@ Python 调用 ClaudeMonitor 发送通知
    - 删除不再使用的代码和文件
    - 更新文档以反映代码变更
 
+## 本地化规范
+
+### 支持的语言
+- 英文 (English): `en` (默认)
+- 中文 (Chinese): `zh`
+
+### 语言偏好存储
+存储在 `~/.claude-task-tracker/config.json`:
+```json
+{
+  "language": "en"
+}
+```
+
+### 本地化文件结构
+```
+swift/Services/
+├── Strings.swift              # 所有本地化字符串定义
+└── LocalizationManager.swift  # 语言管理单例
+```
+
+### 添加新字符串
+
+1. 在 `swift/Services/Strings.swift` 的 `StringKey` 枚举中添加新 key：
+```swift
+enum StringKey: String, CaseIterable {
+    // ... 现有 key ...
+    case new_string_key
+}
+```
+
+2. 在 `translations` 字典中添加双语翻译：
+```swift
+.new_string_key: [.english: "English text", .chinese: "中文文本"],
+```
+
+3. 在 UI 代码中使用 `L(.key_name)` 获取本地化字符串：
+```swift
+let label = NSTextField(labelWithString: L(.new_string_key))
+```
+
+### 字符串命名规范
+格式: `{category}_{element}_{qualifier}`
+
+类别前缀:
+- `app_` - 应用级别字符串
+- `session_` / `session_list_` / `session_card_` - 会话相关
+- `detail_` - 详情视图
+- `settings_` - 设置窗口
+- `nav_` - 导航菜单
+- `filter_` - 筛选选项
+- `status_` - 状态指示
+- `time_` - 时间相关
+- `alert_` - 警告对话框
+- `table_` - 表格列标题
+- `task_` - 任务中心
+- `report_` - 报告分析
+- `copy_` - 复制文本
+
+### 运行时语言切换
+
+1. 在 `init` 中订阅语言变化通知：
+```swift
+NotificationCenter.default.addObserver(
+    self,
+    selector: #selector(languageDidChange),
+    name: LocalizationManager.languageChangedNotification,
+    object: nil
+)
+```
+
+2. 实现 `languageDidChange` 方法更新 UI：
+```swift
+@objc private func languageDidChange() {
+    titleLabel.stringValue = L(.settings_title)
+    // ... 更新其他文本 ...
+}
+```
+
+3. 在 `deinit` 中移除观察者：
+```swift
+deinit {
+    NotificationCenter.default.removeObserver(self)
+}
+```
+
+### 编译顺序
+`Strings.swift` 和 `LocalizationManager.swift` 必须在所有 UI 文件之前编译。
+

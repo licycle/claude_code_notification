@@ -25,14 +25,31 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTextFiel
     private var testAPIButton: NSButton!
     private var apiStatusLabel: NSTextField!
 
+    // Language settings
+    private var languagePopup: NSPopUpButton!
+
+    // Labels that need to be updated on language change
+    private var titleLabel: NSTextField!
+    private var notificationLabel: NSTextField!
+    private var accessibilityLabel: NSTextField!
+    private var notificationSettingsButton: NSButton!
+    private var accessibilitySettingsButton: NSButton!
+    private var summaryTitle: NSTextField!
+    private var hintLabel: NSTextField!
+    private var baseURLLabel: NSTextField!
+    private var apiKeyLabel: NSTextField!
+    private var modelLabel: NSTextField!
+    private var languageLabel: NSTextField!
+    private var languageHintLabel: NSTextField!
+
     convenience init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 480, height: 580),
+            contentRect: NSRect(x: 0, y: 0, width: 480, height: 640),
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
         )
-        window.title = "ClaudeMonitor Settings"
+        window.title = L(.settings_title)
         window.center()
 
         self.init(window: window)
@@ -40,6 +57,45 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTextFiel
         setupUI()
         refreshStatus()
         loadSummarySettings()
+
+        // Listen for language changes
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(languageDidChange),
+            name: LocalizationManager.languageChangedNotification,
+            object: nil
+        )
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    @objc private func languageDidChange() {
+        updateAllTexts()
+    }
+
+    private func updateAllTexts() {
+        window?.title = L(.settings_title)
+        titleLabel.stringValue = L(.settings_permission_status)
+        notificationLabel.stringValue = L(.settings_notification)
+        accessibilityLabel.stringValue = L(.settings_accessibility)
+        notificationSettingsButton.title = L(.settings_open_settings)
+        accessibilitySettingsButton.title = L(.settings_open_settings)
+        summaryTitle.stringValue = L(.settings_summary_ai)
+        summaryEnabledCheckbox.title = L(.settings_enable_ai_summary)
+        hintLabel.stringValue = L(.settings_ai_hint)
+        baseURLLabel.stringValue = L(.settings_base_url)
+        apiKeyLabel.stringValue = L(.settings_api_key)
+        modelLabel.stringValue = L(.settings_model)
+        saveAPIConfigButton.title = L(.settings_save)
+        testAPIButton.title = L(.settings_test_api)
+        testButton.title = L(.settings_send_test)
+        refreshButton.title = L(.settings_refresh_status)
+        languageLabel.stringValue = L(.settings_language) + ":"
+        languageHintLabel.stringValue = L(.settings_language_hint)
+        summaryAPIKeyToggleButton.title = isAPIKeyVisible ? L(.settings_hide) : L(.settings_show)
+        refreshStatus()
     }
 
     // MARK: - NSWindowDelegate
@@ -58,44 +114,78 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTextFiel
         containerView.autoresizingMask = [.width, .height]
         contentView.addSubview(containerView)
 
-        var yOffset: CGFloat = 530
+        var yOffset: CGFloat = 590
+
+        // ========== Language Section ==========
+        let languageSectionTitle = NSTextField(labelWithString: L(.settings_language))
+        languageSectionTitle.font = NSFont.boldSystemFont(ofSize: 16)
+        languageSectionTitle.frame = NSRect(x: 20, y: yOffset, width: 400, height: 24)
+        containerView.addSubview(languageSectionTitle)
+        yOffset -= 35
+
+        languageLabel = NSTextField(labelWithString: L(.settings_language) + ":")
+        languageLabel.font = NSFont.systemFont(ofSize: 13)
+        languageLabel.frame = NSRect(x: 20, y: yOffset, width: 80, height: 20)
+        containerView.addSubview(languageLabel)
+
+        languagePopup = NSPopUpButton(frame: NSRect(x: 100, y: yOffset - 2, width: 120, height: 24))
+        for language in Language.allCases {
+            languagePopup.addItem(withTitle: language.displayName)
+        }
+        languagePopup.selectItem(at: LocalizationManager.shared.currentLanguage == .english ? 0 : 1)
+        languagePopup.target = self
+        languagePopup.action = #selector(languageChanged(_:))
+        containerView.addSubview(languagePopup)
+
+        languageHintLabel = NSTextField(labelWithString: L(.settings_language_hint))
+        languageHintLabel.font = NSFont.systemFont(ofSize: 11)
+        languageHintLabel.textColor = .secondaryLabelColor
+        languageHintLabel.frame = NSRect(x: 20, y: yOffset - 20, width: 420, height: 16)
+        containerView.addSubview(languageHintLabel)
+        yOffset -= 50
+
+        // Separator
+        let separator0 = NSBox(frame: NSRect(x: 20, y: yOffset, width: 440, height: 1))
+        separator0.boxType = .separator
+        containerView.addSubview(separator0)
+        yOffset -= 30
 
         // ========== Permission Status Section ==========
-        let titleLabel = NSTextField(labelWithString: "Permission Status")
+        titleLabel = NSTextField(labelWithString: L(.settings_permission_status))
         titleLabel.font = NSFont.boldSystemFont(ofSize: 16)
         titleLabel.frame = NSRect(x: 20, y: yOffset, width: 400, height: 24)
         containerView.addSubview(titleLabel)
         yOffset -= 40
 
         // Notification permission row
-        let notificationLabel = NSTextField(labelWithString: "Notification:")
+        notificationLabel = NSTextField(labelWithString: L(.settings_notification))
         notificationLabel.font = NSFont.systemFont(ofSize: 14)
         notificationLabel.frame = NSRect(x: 20, y: yOffset, width: 100, height: 20)
         containerView.addSubview(notificationLabel)
 
-        notificationStatusLabel = NSTextField(labelWithString: "Checking...")
+        notificationStatusLabel = NSTextField(labelWithString: L(.settings_checking))
         notificationStatusLabel.font = NSFont.systemFont(ofSize: 14)
         notificationStatusLabel.frame = NSRect(x: 130, y: yOffset, width: 150, height: 20)
         containerView.addSubview(notificationStatusLabel)
 
-        let notificationSettingsButton = NSButton(title: "Open Settings", target: self, action: #selector(openNotificationSettings))
+        notificationSettingsButton = NSButton(title: L(.settings_open_settings), target: self, action: #selector(openNotificationSettings))
         notificationSettingsButton.bezelStyle = .rounded
         notificationSettingsButton.frame = NSRect(x: 340, y: yOffset - 5, width: 120, height: 28)
         containerView.addSubview(notificationSettingsButton)
         yOffset -= 40
 
         // Accessibility permission row
-        let accessibilityLabel = NSTextField(labelWithString: "Accessibility:")
+        accessibilityLabel = NSTextField(labelWithString: L(.settings_accessibility))
         accessibilityLabel.font = NSFont.systemFont(ofSize: 14)
         accessibilityLabel.frame = NSRect(x: 20, y: yOffset, width: 100, height: 20)
         containerView.addSubview(accessibilityLabel)
 
-        accessibilityStatusLabel = NSTextField(labelWithString: "Checking...")
+        accessibilityStatusLabel = NSTextField(labelWithString: L(.settings_checking))
         accessibilityStatusLabel.font = NSFont.systemFont(ofSize: 14)
         accessibilityStatusLabel.frame = NSRect(x: 130, y: yOffset, width: 150, height: 20)
         containerView.addSubview(accessibilityStatusLabel)
 
-        let accessibilitySettingsButton = NSButton(title: "Open Settings", target: self, action: #selector(openAccessibilitySettings))
+        accessibilitySettingsButton = NSButton(title: L(.settings_open_settings), target: self, action: #selector(openAccessibilitySettings))
         accessibilitySettingsButton.bezelStyle = .rounded
         accessibilitySettingsButton.frame = NSRect(x: 340, y: yOffset - 5, width: 120, height: 28)
         containerView.addSubview(accessibilitySettingsButton)
@@ -108,20 +198,20 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTextFiel
         yOffset -= 30
 
         // ========== Summary AI Section ==========
-        let summaryTitle = NSTextField(labelWithString: "Summary AI Settings")
+        summaryTitle = NSTextField(labelWithString: L(.settings_summary_ai))
         summaryTitle.font = NSFont.boldSystemFont(ofSize: 16)
         summaryTitle.frame = NSRect(x: 20, y: yOffset, width: 400, height: 24)
         containerView.addSubview(summaryTitle)
         yOffset -= 35
 
         // Enable checkbox
-        summaryEnabledCheckbox = NSButton(checkboxWithTitle: "Enable AI Summary (uses API to summarize notifications)", target: self, action: #selector(summaryEnabledChanged))
+        summaryEnabledCheckbox = NSButton(checkboxWithTitle: L(.settings_enable_ai_summary), target: self, action: #selector(summaryEnabledChanged))
         summaryEnabledCheckbox.frame = NSRect(x: 20, y: yOffset, width: 440, height: 20)
         containerView.addSubview(summaryEnabledCheckbox)
         yOffset -= 10
 
         // Hint text when disabled
-        let hintLabel = NSTextField(labelWithString: "When disabled, notifications show raw user prompt and AI assistance requests")
+        hintLabel = NSTextField(labelWithString: L(.settings_ai_hint))
         hintLabel.font = NSFont.systemFont(ofSize: 11)
         hintLabel.textColor = .secondaryLabelColor
         hintLabel.frame = NSRect(x: 38, y: yOffset, width: 420, height: 16)
@@ -135,7 +225,7 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTextFiel
         var configY: CGFloat = 155
 
         // Base URL
-        let baseURLLabel = NSTextField(labelWithString: "Base URL:")
+        baseURLLabel = NSTextField(labelWithString: L(.settings_base_url))
         baseURLLabel.font = NSFont.systemFont(ofSize: 13)
         baseURLLabel.frame = NSRect(x: 0, y: configY, width: 80, height: 20)
         summaryConfigContainer.addSubview(baseURLLabel)
@@ -148,7 +238,7 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTextFiel
         configY -= 35
 
         // API Key
-        let apiKeyLabel = NSTextField(labelWithString: "API Key:")
+        apiKeyLabel = NSTextField(labelWithString: L(.settings_api_key))
         apiKeyLabel.font = NSFont.systemFont(ofSize: 13)
         apiKeyLabel.frame = NSRect(x: 0, y: configY, width: 80, height: 20)
         summaryConfigContainer.addSubview(apiKeyLabel)
@@ -162,14 +252,14 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTextFiel
         summaryConfigContainer.addSubview(summaryAPIKeyField)
 
         // Show/Hide toggle button
-        summaryAPIKeyToggleButton = NSButton(title: "Show", target: self, action: #selector(toggleAPIKeyVisibility))
+        summaryAPIKeyToggleButton = NSButton(title: L(.settings_show), target: self, action: #selector(toggleAPIKeyVisibility))
         summaryAPIKeyToggleButton.bezelStyle = .rounded
         summaryAPIKeyToggleButton.frame = NSRect(x: 375, y: configY - 4, width: 55, height: 24)
         summaryConfigContainer.addSubview(summaryAPIKeyToggleButton)
         configY -= 35
 
         // Model
-        let modelLabel = NSTextField(labelWithString: "Model:")
+        modelLabel = NSTextField(labelWithString: L(.settings_model))
         modelLabel.font = NSFont.systemFont(ofSize: 13)
         modelLabel.frame = NSRect(x: 0, y: configY, width: 80, height: 20)
         summaryConfigContainer.addSubview(modelLabel)
@@ -182,12 +272,12 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTextFiel
         configY -= 40
 
         // Save and Test API buttons
-        saveAPIConfigButton = NSButton(title: "Save", target: self, action: #selector(saveAPIConfig))
+        saveAPIConfigButton = NSButton(title: L(.settings_save), target: self, action: #selector(saveAPIConfig))
         saveAPIConfigButton.bezelStyle = .rounded
         saveAPIConfigButton.frame = NSRect(x: 90, y: configY, width: 80, height: 28)
         summaryConfigContainer.addSubview(saveAPIConfigButton)
 
-        testAPIButton = NSButton(title: "Test API", target: self, action: #selector(testAPIConnection))
+        testAPIButton = NSButton(title: L(.settings_test_api), target: self, action: #selector(testAPIConnection))
         testAPIButton.bezelStyle = .rounded
         testAPIButton.frame = NSRect(x: 180, y: configY, width: 100, height: 28)
         summaryConfigContainer.addSubview(testAPIButton)
@@ -208,15 +298,23 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTextFiel
         yOffset -= 30
 
         // ========== Test & Refresh Buttons ==========
-        testButton = NSButton(title: "Send Test Notification", target: self, action: #selector(sendTestNotification))
+        testButton = NSButton(title: L(.settings_send_test), target: self, action: #selector(sendTestNotification))
         testButton.bezelStyle = .rounded
         testButton.frame = NSRect(x: 80, y: yOffset, width: 160, height: 32)
         containerView.addSubview(testButton)
 
-        refreshButton = NSButton(title: "Refresh Status", target: self, action: #selector(refreshStatus))
+        refreshButton = NSButton(title: L(.settings_refresh_status), target: self, action: #selector(refreshStatus))
         refreshButton.bezelStyle = .rounded
         refreshButton.frame = NSRect(x: 260, y: yOffset, width: 140, height: 32)
         containerView.addSubview(refreshButton)
+    }
+
+    @objc func languageChanged(_ sender: NSPopUpButton) {
+        guard let selectedTitle = sender.titleOfSelectedItem,
+              let language = Language.allCases.first(where: { $0.displayName == selectedTitle }) else {
+            return
+        }
+        LocalizationManager.shared.setLanguage(language)
     }
 
     private func loadSummarySettings() {
@@ -232,7 +330,7 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTextFiel
     private func updateAPIKeyDisplay() {
         if isAPIKeyVisible {
             summaryAPIKeyField.stringValue = actualAPIKey
-            summaryAPIKeyToggleButton.title = "Hide"
+            summaryAPIKeyToggleButton.title = L(.settings_hide)
         } else {
             // Show masked version
             if actualAPIKey.isEmpty {
@@ -240,7 +338,7 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTextFiel
             } else {
                 summaryAPIKeyField.stringValue = String(repeating: "•", count: min(actualAPIKey.count, 32))
             }
-            summaryAPIKeyToggleButton.title = "Show"
+            summaryAPIKeyToggleButton.title = L(.settings_show)
         }
     }
 
@@ -271,13 +369,13 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTextFiel
 
         // Validate
         if baseURL.isEmpty {
-            apiStatusLabel.stringValue = "⚠️ Base URL is required"
+            apiStatusLabel.stringValue = "⚠️ " + L(.settings_url_required)
             apiStatusLabel.textColor = .systemOrange
             return
         }
 
         if actualAPIKey.isEmpty {
-            apiStatusLabel.stringValue = "⚠️ API Key is required"
+            apiStatusLabel.stringValue = "⚠️ " + L(.settings_key_required)
             apiStatusLabel.textColor = .systemOrange
             return
         }
@@ -291,7 +389,7 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTextFiel
         // Save to config.json (the single source of truth)
         settings.saveToFile()
 
-        apiStatusLabel.stringValue = "✓ Saved to config.json"
+        apiStatusLabel.stringValue = "✓ " + L(.settings_saved_success)
         apiStatusLabel.textColor = .systemGreen
 
         log("API config saved: baseURL=\(baseURL), model=\(model.isEmpty ? "gpt-3.5-turbo" : model)")
@@ -303,21 +401,21 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTextFiel
 
         // Validate inputs
         if baseURL.isEmpty {
-            apiStatusLabel.stringValue = "⚠️ Please enter Base URL first"
+            apiStatusLabel.stringValue = "⚠️ " + L(.settings_url_required)
             apiStatusLabel.textColor = .systemOrange
             return
         }
 
         if actualAPIKey.isEmpty {
-            apiStatusLabel.stringValue = "⚠️ Please enter API Key first"
+            apiStatusLabel.stringValue = "⚠️ " + L(.settings_key_required)
             apiStatusLabel.textColor = .systemOrange
             return
         }
 
         // Disable button and show testing status
         testAPIButton.isEnabled = false
-        testAPIButton.title = "Testing..."
-        apiStatusLabel.stringValue = "🔄 Testing API connection..."
+        testAPIButton.title = L(.settings_testing)
+        apiStatusLabel.stringValue = "🔄 " + L(.settings_testing)
         apiStatusLabel.textColor = .secondaryLabelColor
 
         // Build API URL
@@ -326,8 +424,8 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTextFiel
         // Create test request
         guard let url = URL(string: apiURL) else {
             testAPIButton.isEnabled = true
-            testAPIButton.title = "Test API"
-            apiStatusLabel.stringValue = "✗ Invalid URL format"
+            testAPIButton.title = L(.settings_test_api)
+            apiStatusLabel.stringValue = "✗ " + L(.settings_test_invalid_url)
             apiStatusLabel.textColor = .systemRed
             return
         }
@@ -351,7 +449,7 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTextFiel
             request.httpBody = try JSONSerialization.data(withJSONObject: testPayload)
         } catch {
             testAPIButton.isEnabled = true
-            testAPIButton.title = "Test API"
+            testAPIButton.title = L(.settings_test_api)
             apiStatusLabel.stringValue = "✗ Failed to create request"
             apiStatusLabel.textColor = .systemRed
             return
@@ -361,14 +459,14 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTextFiel
         let task = URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
             DispatchQueue.main.async {
                 self?.testAPIButton.isEnabled = true
-                self?.testAPIButton.title = "Test API"
+                self?.testAPIButton.title = L(.settings_test_api)
 
                 if let error = error {
                     let errorMsg = error.localizedDescription
                     if errorMsg.contains("timed out") {
-                        self?.apiStatusLabel.stringValue = "✗ Connection timeout"
+                        self?.apiStatusLabel.stringValue = "✗ " + L(.settings_test_timeout)
                     } else if errorMsg.contains("Could not connect") {
-                        self?.apiStatusLabel.stringValue = "✗ Cannot connect to server"
+                        self?.apiStatusLabel.stringValue = "✗ " + L(.settings_test_connection_failed)
                     } else {
                         self?.apiStatusLabel.stringValue = "✗ \(errorMsg.prefix(50))"
                     }
@@ -383,17 +481,17 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTextFiel
                 }
 
                 if httpResponse.statusCode == 200 {
-                    self?.apiStatusLabel.stringValue = "✓ API connection successful!"
+                    self?.apiStatusLabel.stringValue = "✓ " + L(.settings_test_success)
                     self?.apiStatusLabel.textColor = .systemGreen
                     log("API test successful")
                 } else if httpResponse.statusCode == 401 {
-                    self?.apiStatusLabel.stringValue = "✗ Invalid API Key (401)"
+                    self?.apiStatusLabel.stringValue = "✗ " + L(.settings_test_invalid_key)
                     self?.apiStatusLabel.textColor = .systemRed
                 } else if httpResponse.statusCode == 404 {
-                    self?.apiStatusLabel.stringValue = "✗ Endpoint not found (404) - check Base URL"
+                    self?.apiStatusLabel.stringValue = "✗ " + L(.settings_test_not_found)
                     self?.apiStatusLabel.textColor = .systemRed
                 } else if httpResponse.statusCode == 429 {
-                    self?.apiStatusLabel.stringValue = "⚠️ Rate limited (429) - but API key is valid"
+                    self?.apiStatusLabel.stringValue = "⚠️ " + L(.settings_test_rate_limited)
                     self?.apiStatusLabel.textColor = .systemOrange
                 } else {
                     // Try to get error message from response
@@ -434,10 +532,10 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTextFiel
         // Check notification permission
         PermissionManager.shared.checkNotificationPermission { [weak self] authorized in
             if authorized {
-                self?.notificationStatusLabel.stringValue = "Authorized"
+                self?.notificationStatusLabel.stringValue = L(.settings_authorized)
                 self?.notificationStatusLabel.textColor = .systemGreen
             } else {
-                self?.notificationStatusLabel.stringValue = "Not Authorized"
+                self?.notificationStatusLabel.stringValue = L(.settings_not_authorized)
                 self?.notificationStatusLabel.textColor = .systemRed
             }
         }
@@ -445,10 +543,10 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTextFiel
         // Check accessibility permission
         let accessibilityAuthorized = PermissionManager.shared.checkAccessibilityPermission()
         if accessibilityAuthorized {
-            accessibilityStatusLabel.stringValue = "Authorized"
+            accessibilityStatusLabel.stringValue = L(.settings_authorized)
             accessibilityStatusLabel.textColor = .systemGreen
         } else {
-            accessibilityStatusLabel.stringValue = "Not Authorized"
+            accessibilityStatusLabel.stringValue = L(.settings_not_authorized)
             accessibilityStatusLabel.textColor = .systemRed
         }
     }
@@ -470,25 +568,25 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTextFiel
 
     @objc func sendTestNotification() {
         testButton.isEnabled = false
-        testButton.title = "Sending..."
+        testButton.title = L(.settings_sending)
 
         // First check/request permission
         PermissionManager.shared.requestNotificationPermission { [weak self] granted in
             if granted {
                 PermissionManager.shared.sendTestNotification { success in
                     self?.testButton.isEnabled = true
-                    self?.testButton.title = "Send Test Notification"
+                    self?.testButton.title = L(.settings_send_test)
 
                     if success {
-                        self?.showAlert(title: "Success", message: "Test notification sent!")
+                        self?.showAlert(title: L(.alert_success), message: L(.settings_notification_success))
                     } else {
-                        self?.showAlert(title: "Error", message: "Failed to send notification")
+                        self?.showAlert(title: L(.alert_error), message: L(.settings_notification_error))
                     }
                 }
             } else {
                 self?.testButton.isEnabled = true
-                self?.testButton.title = "Send Test Notification"
-                self?.showAlert(title: "Permission Denied", message: "Please grant notification permission first")
+                self?.testButton.title = L(.settings_send_test)
+                self?.showAlert(title: L(.alert_error), message: L(.settings_permission_denied))
             }
 
             // Refresh status after permission request
@@ -500,8 +598,8 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTextFiel
         let alert = NSAlert()
         alert.messageText = title
         alert.informativeText = message
-        alert.alertStyle = title == "Success" ? .informational : .warning
-        alert.addButton(withTitle: "OK")
+        alert.alertStyle = title == L(.alert_success) ? .informational : .warning
+        alert.addButton(withTitle: L(.alert_ok))
         alert.runModal()
     }
 }

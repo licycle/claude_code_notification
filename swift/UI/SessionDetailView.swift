@@ -163,7 +163,7 @@ class SessionDetailViewController: NSViewController {
         let header = NSView(frame: NSRect(x: 0, y: 0, width: 360, height: 50))
 
         // 返回按钮
-        let backButton = NSButton(title: "<- 返回", target: self, action: #selector(backTapped))
+        let backButton = NSButton(title: L(.detail_back), target: self, action: #selector(backTapped))
         backButton.bezelStyle = .regularSquare
         backButton.isBordered = false
         backButton.frame = NSRect(x: 8, y: 12, width: 60, height: 28)
@@ -197,13 +197,13 @@ class SessionDetailViewController: NSViewController {
         footer.addSubview(separator)
 
         // 跳转终端按钮
-        let jumpButton = NSButton(title: "跳转终端", target: self, action: #selector(jumpTapped))
+        let jumpButton = NSButton(title: L(.detail_jump_terminal), target: self, action: #selector(jumpTapped))
         jumpButton.bezelStyle = .rounded
         jumpButton.frame = NSRect(x: 12, y: 10, width: 80, height: 30)
         footer.addSubview(jumpButton)
 
         // 复制摘要按钮
-        let copyButton = NSButton(title: "复制摘要", target: self, action: #selector(copyTapped))
+        let copyButton = NSButton(title: L(.detail_copy_summary), target: self, action: #selector(copyTapped))
         copyButton.bezelStyle = .rounded
         copyButton.frame = NSRect(x: 100, y: 10, width: 80, height: 30)
         footer.addSubview(copyButton)
@@ -219,7 +219,7 @@ class SessionDetailViewController: NSViewController {
         let section = NSView(frame: NSRect(x: 0, y: 0, width: 336, height: 90))
 
         // 区域标题（在顶部）
-        let titleLabel = NSTextField(labelWithString: "原始目标")
+        let titleLabel = NSTextField(labelWithString: L(.detail_original_goal))
         titleLabel.font = NSFont.boldSystemFont(ofSize: 13)
         titleLabel.frame = NSRect(x: 0, y: 70, width: 336, height: 18)
         section.addSubview(titleLabel)
@@ -255,7 +255,7 @@ class SessionDetailViewController: NSViewController {
         let timeline = summary?.timeline ?? []
 
         // 区域标题（在顶部）
-        let titleLabel = NSTextField(labelWithString: "进度时间线 (\(timeline.count))")
+        let titleLabel = NSTextField(labelWithString: L(.detail_timeline) + " (\(timeline.count))")
         titleLabel.font = NSFont.boldSystemFont(ofSize: 13)
         titleLabel.frame = NSRect(x: 0, y: 160, width: 336, height: 18)
         section.addSubview(titleLabel)
@@ -278,7 +278,7 @@ class SessionDetailViewController: NSViewController {
 
         if timeline.isEmpty {
             // 无数据时显示提示
-            let emptyLabel = NSTextField(labelWithString: "暂无时间线数据")
+            let emptyLabel = NSTextField(labelWithString: L(.detail_timeline_empty))
             emptyLabel.font = NSFont.systemFont(ofSize: 12)
             emptyLabel.textColor = .secondaryLabelColor
             emptyLabel.frame = NSRect(x: 10, y: contentHeight - 30, width: 300, height: 20)
@@ -434,7 +434,7 @@ class SessionDetailViewController: NSViewController {
         let pendingTodos = todos.filter { $0.status != "completed" }
 
         // 区域标题（在顶部）
-        let titleLabel = NSTextField(labelWithString: "Todo (\(completedTodos.count)/\(todos.count))")
+        let titleLabel = NSTextField(labelWithString: L(.detail_todo) + " (\(completedTodos.count)/\(todos.count))")
         titleLabel.font = NSFont.boldSystemFont(ofSize: 13)
         titleLabel.frame = NSRect(x: 0, y: 90, width: 336, height: 18)
         section.addSubview(titleLabel)
@@ -466,14 +466,14 @@ class SessionDetailViewController: NSViewController {
 
         // ===== 待完成部分（先显示）=====
         yOffset -= sectionTitleHeight
-        let pendingTitle = NSTextField(labelWithString: "⏳ 待完成 (\(pendingTodos.count))")
+        let pendingTitle = NSTextField(labelWithString: "⏳ " + L(.detail_todo_pending) + " (\(pendingTodos.count))")
         pendingTitle.font = NSFont.systemFont(ofSize: 11, weight: .medium)
         pendingTitle.frame = NSRect(x: 5, y: yOffset, width: 310, height: 18)
         todosContentView.addSubview(pendingTitle)
 
         if pendingTodos.isEmpty {
             yOffset -= todoItemHeight
-            let emptyLabel = NSTextField(labelWithString: "暂无")
+            let emptyLabel = NSTextField(labelWithString: L(.detail_todo_none))
             emptyLabel.font = NSFont.systemFont(ofSize: 11)
             emptyLabel.textColor = .tertiaryLabelColor
             emptyLabel.frame = NSRect(x: 15, y: yOffset, width: 300, height: 16)
@@ -492,14 +492,14 @@ class SessionDetailViewController: NSViewController {
 
         // ===== 已完成部分（后显示）=====
         yOffset -= spacing + sectionTitleHeight
-        let completedTitle = NSTextField(labelWithString: "✅ 已完成 (\(completedTodos.count))")
+        let completedTitle = NSTextField(labelWithString: "✅ " + L(.detail_todo_completed) + " (\(completedTodos.count))")
         completedTitle.font = NSFont.systemFont(ofSize: 11, weight: .medium)
         completedTitle.frame = NSRect(x: 5, y: yOffset, width: 310, height: 18)
         todosContentView.addSubview(completedTitle)
 
         if completedTodos.isEmpty {
             yOffset -= todoItemHeight
-            let emptyLabel = NSTextField(labelWithString: "暂无")
+            let emptyLabel = NSTextField(labelWithString: L(.detail_todo_none))
             emptyLabel.font = NSFont.systemFont(ofSize: 11)
             emptyLabel.textColor = .tertiaryLabelColor
             emptyLabel.frame = NSRect(x: 15, y: yOffset, width: 300, height: 16)
@@ -545,16 +545,16 @@ class SessionDetailViewController: NSViewController {
 
     /// 复制摘要按钮点击事件
     @objc private func copyTapped() {
-        var text = "任务: \(session.originalGoal)\n"
-        text += "状态: \(session.currentStatus)\n"
-        text += "项目: \(session.project)\n"
+        var text = L(.copy_task) + " \(session.originalGoal)\n"
+        text += L(.copy_status) + " \(session.currentStatus)\n"
+        text += L(.copy_project) + " \(session.project)\n"
 
         if let progress = summary?.progress {
-            text += "进度: \(progress.completed)/\(progress.total)\n"
+            text += L(.copy_progress) + " \(progress.completed)/\(progress.total)\n"
         }
 
         if let timeline = summary?.timeline, !timeline.isEmpty {
-            text += "\n时间线:\n"
+            text += "\n" + L(.copy_timeline) + "\n"
             for node in timeline {
                 text += "  \(node.time) \(node.title): \(node.fullDescription)\n"
             }

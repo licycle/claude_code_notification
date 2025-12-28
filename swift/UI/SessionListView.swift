@@ -51,7 +51,7 @@ class SessionListViewController: NSViewController {
     private func createHeaderView() -> NSView {
         let header = NSView(frame: NSRect(x: 0, y: 0, width: 360, height: 50))
 
-        let titleLabel = NSTextField(labelWithString: "Claude Monitor")
+        let titleLabel = NSTextField(labelWithString: L(.session_list_title))
         titleLabel.font = NSFont.boldSystemFont(ofSize: 16)
         titleLabel.frame = NSRect(x: 16, y: 15, width: 200, height: 20)
         header.addSubview(titleLabel)
@@ -84,17 +84,17 @@ class SessionListViewController: NSViewController {
         separator.boxType = .separator
         footer.addSubview(separator)
 
-        let cleanupButton = NSButton(title: "清理无效", target: self, action: #selector(forceCleanup))
+        let cleanupButton = NSButton(title: L(.session_list_cleanup), target: self, action: #selector(forceCleanup))
         cleanupButton.bezelStyle = .rounded
         cleanupButton.frame = NSRect(x: 12, y: 10, width: 70, height: 30)
         footer.addSubview(cleanupButton)
 
-        let managementButton = NSButton(title: "管理中心", target: self, action: #selector(openManagement))
+        let managementButton = NSButton(title: L(.session_list_management), target: self, action: #selector(openManagement))
         managementButton.bezelStyle = .rounded
         managementButton.frame = NSRect(x: 140, y: 10, width: 80, height: 30)
         footer.addSubview(managementButton)
 
-        let refreshButton = NSButton(title: "刷新", target: self, action: #selector(refreshTapped))
+        let refreshButton = NSButton(title: L(.session_list_refresh), target: self, action: #selector(refreshTapped))
         refreshButton.bezelStyle = .rounded
         refreshButton.frame = NSRect(x: 280, y: 10, width: 60, height: 30)
         footer.addSubview(refreshButton)
@@ -170,7 +170,7 @@ class SessionListViewController: NSViewController {
     }
 
     private func showEmptyState() {
-        let emptyLabel = NSTextField(labelWithString: "暂无活跃任务")
+        let emptyLabel = NSTextField(labelWithString: L(.session_list_empty))
         emptyLabel.font = NSFont.systemFont(ofSize: 14)
         emptyLabel.textColor = .secondaryLabelColor
         emptyLabel.alignment = .center
