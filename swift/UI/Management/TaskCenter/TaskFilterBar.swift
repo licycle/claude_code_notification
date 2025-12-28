@@ -23,11 +23,46 @@ class TaskFilterBar: NSView {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         setupUI()
+        setupLanguageObserver()
     }
 
     required init?(coder: NSCoder) {
         super.init(coder: coder)
         setupUI()
+        setupLanguageObserver()
+    }
+
+    private func setupLanguageObserver() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(languageDidChange),
+            name: LocalizationManager.languageChangedNotification,
+            object: nil
+        )
+    }
+
+    @objc private func languageDidChange() {
+        searchField.placeholderString = L(.filter_search_placeholder)
+        refreshButton.title = L(.session_list_refresh)
+        updateStatusPopup()
+        reloadAccounts()
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    private func updateStatusPopup() {
+        let currentIndex = statusPopup.indexOfSelectedItem
+        statusPopup.removeAllItems()
+        statusPopup.addItems(withTitles: [
+            L(.filter_all_status),
+            L(.filter_working),
+            L(.filter_idle),
+            L(.filter_waiting),
+            L(.filter_completed)
+        ])
+        statusPopup.selectItem(at: currentIndex)
     }
 
     private func setupUI() {
@@ -35,7 +70,7 @@ class TaskFilterBar: NSView {
 
         // Search field
         searchField = NSSearchField()
-        searchField.placeholderString = "搜索会话..."
+        searchField.placeholderString = L(.filter_search_placeholder)
         searchField.translatesAutoresizingMaskIntoConstraints = false
         searchField.target = self
         searchField.action = #selector(searchChanged(_:))
@@ -45,11 +80,11 @@ class TaskFilterBar: NSView {
         statusPopup = NSPopUpButton()
         statusPopup.translatesAutoresizingMaskIntoConstraints = false
         statusPopup.addItems(withTitles: [
-            "全部状态",
-            "工作中",
-            "空闲",
-            "等待决策",
-            "已完成"
+            L(.filter_all_status),
+            L(.filter_working),
+            L(.filter_idle),
+            L(.filter_waiting),
+            L(.filter_completed)
         ])
         statusPopup.target = self
         statusPopup.action = #selector(statusChanged(_:))
@@ -58,7 +93,7 @@ class TaskFilterBar: NSView {
         // Account filter
         accountPopup = NSPopUpButton()
         accountPopup.translatesAutoresizingMaskIntoConstraints = false
-        accountPopup.addItem(withTitle: "全部账户")
+        accountPopup.addItem(withTitle: L(.filter_all_accounts))
         accountPopup.target = self
         accountPopup.action = #selector(accountChanged(_:))
         addSubview(accountPopup)
@@ -66,7 +101,7 @@ class TaskFilterBar: NSView {
         // Refresh button
         refreshButton = NSButton()
         refreshButton.bezelStyle = .rounded
-        refreshButton.title = "刷新"
+        refreshButton.title = L(.session_list_refresh)
         if #available(macOS 11.0, *) {
             refreshButton.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: "Refresh")
         }
@@ -106,7 +141,7 @@ class TaskFilterBar: NSView {
 
     func reloadAccounts() {
         accountPopup.removeAllItems()
-        accountPopup.addItem(withTitle: "全部账户")
+        accountPopup.addItem(withTitle: L(.filter_all_accounts))
         loadAccounts()
     }
 

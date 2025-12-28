@@ -14,7 +14,7 @@ class ManagementWindowController: NSWindowController {
             defer: false
         )
 
-        window.title = "Claude Monitor - Management Center"
+        window.title = L(.management_title)
         window.minSize = NSSize(width: 1050, height: 550)
         window.center()
 
@@ -25,6 +25,24 @@ class ManagementWindowController: NSWindowController {
 
         self.init(window: window)
         setupContent()
+        setupLanguageObserver()
+    }
+
+    private func setupLanguageObserver() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(languageDidChange),
+            name: LocalizationManager.languageChangedNotification,
+            object: nil
+        )
+    }
+
+    @objc private func languageDidChange() {
+        window?.title = L(.management_title)
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
     }
 
     private func setupContent() {

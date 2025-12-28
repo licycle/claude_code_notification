@@ -9,9 +9,17 @@ enum NavigationItem: Int, CaseIterable {
 
     var title: String {
         switch self {
-        case .taskCenter: return "任务中心"
-        case .reports: return "报告分析"
-        case .settings: return "设置"
+        case .taskCenter: return "Task Center"
+        case .reports: return "Reports"
+        case .settings: return "Settings"
+        }
+    }
+
+    var localizedTitle: String {
+        switch self {
+        case .taskCenter: return L(.nav_task_center)
+        case .reports: return L(.nav_reports)
+        case .settings: return L(.nav_settings)
         }
     }
 

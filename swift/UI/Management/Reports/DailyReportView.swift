@@ -24,7 +24,7 @@ class DailyReportView: NSView {
         wantsLayer = true
 
         // Title
-        titleLabel = NSTextField(labelWithString: "今日报告")
+        titleLabel = NSTextField(labelWithString: L(.report_today))
         titleLabel.font = NSFont.boldSystemFont(ofSize: 18)
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         addSubview(titleLabel)
@@ -78,10 +78,10 @@ class DailyReportView: NSView {
 
         // Create stat labels
         let stats = [
-            ("总会话", "\(total)", NSColor.labelColor),
-            ("已完成", "\(completed)", NSColor.systemGreen),
-            ("工作中", "\(working)", NSColor.systemBlue),
-            ("等待中", "\(waiting)", NSColor.systemOrange)
+            (L(.report_total_sessions), "\(total)", NSColor.labelColor),
+            (L(.report_completed), "\(completed)", NSColor.systemGreen),
+            (L(.report_working), "\(working)", NSColor.systemBlue),
+            (L(.report_waiting), "\(waiting)", NSColor.systemOrange)
         ]
 
         let stackView = NSStackView()

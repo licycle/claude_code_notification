@@ -14,6 +14,7 @@ class SidebarViewController: NSViewController {
 
     private var buttons: [NSButton] = []
     private var selectedItem: NavigationItem = .taskCenter
+    private var titleLabel: NSTextField!
 
     override func loadView() {
         view = NSView(frame: NSRect(x: 0, y: 0, width: 180, height: 600))
@@ -25,11 +26,35 @@ class SidebarViewController: NSViewController {
         super.viewDidLoad()
         setupUI()
         updateSelection()
+        setupLanguageObserver()
+    }
+
+    private func setupLanguageObserver() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(languageDidChange),
+            name: LocalizationManager.languageChangedNotification,
+            object: nil
+        )
+    }
+
+    @objc private func languageDidChange() {
+        titleLabel.stringValue = L(.app_title)
+        // Update button titles
+        for (index, button) in buttons.enumerated() {
+            if let item = NavigationItem(rawValue: index), item != .reports {
+                button.title = "  " + item.localizedTitle
+            }
+        }
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
     }
 
     private func setupUI() {
         // Title
-        let titleLabel = NSTextField(labelWithString: "Claude Monitor")
+        titleLabel = NSTextField(labelWithString: L(.app_title))
         titleLabel.font = NSFont.boldSystemFont(ofSize: 14)
         titleLabel.textColor = .labelColor
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -72,12 +97,12 @@ class SidebarViewController: NSViewController {
 
         // Set title with icon
         if #available(macOS 11.0, *) {
-            let image = NSImage(systemSymbolName: item.icon, accessibilityDescription: item.title)
+            let image = NSImage(systemSymbolName: item.icon, accessibilityDescription: item.localizedTitle)
             button.image = image
             button.imagePosition = .imageLeading
         }
 
-        button.title = "  " + item.title
+        button.title = "  " + item.localizedTitle
         button.alignment = .left
         button.font = NSFont.systemFont(ofSize: 13)
 

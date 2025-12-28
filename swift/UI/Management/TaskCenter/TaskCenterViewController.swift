@@ -100,23 +100,23 @@ class TaskCenterViewController: NSViewController {
         tableView.target = self
 
         // Add columns - Goal/Project 150px, others 80px
-        addColumn(id: colMode, title: "Account", width: 80)
-        addColumn(id: colSessionId, title: "Session ID", width: 80)
-        addColumn(id: colGoal, title: "Goal", width: 150)
-        addColumn(id: colStatus, title: "Status", width: 100)
-        addColumn(id: colProject, title: "Project", width: 150)
-        addColumn(id: colTime, title: "Updated", width: 80)
-        addColumn(id: colAction, title: "Action", width: 80)
+        addColumn(id: colMode, title: L(.table_account), width: 80)
+        addColumn(id: colSessionId, title: L(.table_session_id), width: 80)
+        addColumn(id: colGoal, title: L(.table_goal), width: 150)
+        addColumn(id: colStatus, title: L(.table_status), width: 100)
+        addColumn(id: colProject, title: L(.table_project), width: 150)
+        addColumn(id: colTime, title: L(.table_updated), width: 80)
+        addColumn(id: colAction, title: L(.table_action), width: 80)
 
         scrollView.documentView = tableView
 
         // Context menu
         let menu = NSMenu()
-        menu.addItem(NSMenuItem(title: "View Details", action: #selector(showDetail(_:)), keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "Jump to Terminal", action: #selector(jumpToTerminal(_:)), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: L(.context_view_details), action: #selector(showDetail(_:)), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: L(.context_jump_terminal), action: #selector(jumpToTerminal(_:)), keyEquivalent: ""))
         menu.addItem(NSMenuItem.separator())
-        menu.addItem(NSMenuItem(title: "Mark Completed", action: #selector(markCompleted(_:)), keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "Delete", action: #selector(deleteSession(_:)), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: L(.context_mark_completed), action: #selector(markCompleted(_:)), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: L(.context_delete), action: #selector(deleteSession(_:)), keyEquivalent: ""))
         tableView.menu = menu
     }
 
@@ -241,11 +241,11 @@ class TaskCenterViewController: NSViewController {
         guard !rows.isEmpty else { return }
 
         let alert = NSAlert()
-        alert.messageText = "Confirm Delete"
-        alert.informativeText = "Are you sure you want to delete \(rows.count) session(s)? This action cannot be undone."
+        alert.messageText = L(.delete_confirm_title)
+        alert.informativeText = L(.delete_confirm_message)
         alert.alertStyle = .warning
-        alert.addButton(withTitle: "Delete")
-        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: L(.delete_button))
+        alert.addButton(withTitle: L(.cancel_button))
 
         if alert.runModal() == .alertFirstButtonReturn {
             for row in rows.reversed() {
@@ -318,9 +318,9 @@ extension TaskCenterViewController: NSTableViewDelegate {
             // 返回按钮而不是文本框
             let buttonId = NSUserInterfaceItemIdentifier("ActionButton")
             let button = tableView.makeView(withIdentifier: buttonId, owner: nil) as? NSButton
-                ?? NSButton(title: "详情", target: self, action: #selector(detailButtonClicked(_:)))
+                ?? NSButton(title: L(.session_card_detail), target: self, action: #selector(detailButtonClicked(_:)))
             button.identifier = buttonId
-            button.title = "详情"
+            button.title = L(.session_card_detail)
             button.bezelStyle = .inline
             button.tag = row
             button.target = self
@@ -343,11 +343,11 @@ extension TaskCenterViewController: NSTableViewDelegate {
 
     private func statusText(for status: String) -> String {
         switch status {
-        case "working", "executing_tool", "subagent_working": return "🟢 Working"
-        case "idle": return "🟡 Idle"
-        case "waiting_for_user": return "🔴 Waiting"
-        case "waiting_permission": return "🔐 Permission"
-        case "completed": return "✅ Completed"
+        case "working", "executing_tool", "subagent_working": return "🟢 " + L(.task_status_working)
+        case "idle": return "🟡 " + L(.task_status_idle)
+        case "waiting_for_user": return "🔴 " + L(.task_status_waiting)
+        case "waiting_permission": return "🔐 " + L(.task_status_permission)
+        case "completed": return "✅ " + L(.task_status_completed)
         default: return status
         }
     }
@@ -376,10 +376,10 @@ extension TaskCenterViewController: NSTableViewDelegate {
 
     private func relativeTime(from date: Date) -> String {
         let interval = Date().timeIntervalSince(date)
-        if interval < 60 { return "Just now" }
-        if interval < 3600 { return "\(Int(interval / 60))m ago" }
-        if interval < 86400 { return "\(Int(interval / 3600))h ago" }
-        return "\(Int(interval / 86400))d ago"
+        if interval < 60 { return L(.time_just_now) }
+        if interval < 3600 { return "\(Int(interval / 60))" + L(.time_minutes_ago) }
+        if interval < 86400 { return "\(Int(interval / 3600))" + L(.time_hours_ago) }
+        return "\(Int(interval / 86400))" + L(.time_days_ago)
     }
 }
 

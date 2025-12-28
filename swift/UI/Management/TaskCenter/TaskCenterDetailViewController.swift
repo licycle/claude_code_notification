@@ -101,7 +101,7 @@ class TaskCenterDetailViewController: NSViewController {
     private func createHeaderView() -> NSView {
         let header = NSView(frame: NSRect(x: 0, y: 0, width: 870, height: 50))
 
-        let backButton = NSButton(title: "← 返回列表", target: self, action: #selector(backTapped))
+        let backButton = NSButton(title: L(.detail_back_list), target: self, action: #selector(backTapped))
         backButton.bezelStyle = .rounded
         backButton.frame = NSRect(x: 20, y: 10, width: 100, height: 30)
         header.addSubview(backButton)
@@ -130,12 +130,12 @@ class TaskCenterDetailViewController: NSViewController {
         separator.boxType = .separator
         footer.addSubview(separator)
 
-        let jumpButton = NSButton(title: "跳转终端", target: self, action: #selector(jumpTapped))
+        let jumpButton = NSButton(title: L(.detail_jump_terminal), target: self, action: #selector(jumpTapped))
         jumpButton.bezelStyle = .rounded
         jumpButton.frame = NSRect(x: 20, y: 15, width: 100, height: 30)
         footer.addSubview(jumpButton)
 
-        let copyButton = NSButton(title: "复制摘要", target: self, action: #selector(copyTapped))
+        let copyButton = NSButton(title: L(.detail_copy_summary), target: self, action: #selector(copyTapped))
         copyButton.bezelStyle = .rounded
         copyButton.frame = NSRect(x: 130, y: 15, width: 100, height: 30)
         footer.addSubview(copyButton)
@@ -208,7 +208,7 @@ class TaskCenterDetailViewController: NSViewController {
     private func createGoalSection() -> NSView {
         let section = NSView()
 
-        let titleLabel = NSTextField(labelWithString: "原始目标")
+        let titleLabel = NSTextField(labelWithString: L(.detail_original_goal))
         titleLabel.font = NSFont.boldSystemFont(ofSize: 14)
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         section.addSubview(titleLabel)
@@ -251,7 +251,7 @@ class TaskCenterDetailViewController: NSViewController {
     private func createInfoSection() -> NSView {
         let section = NSView()
 
-        let titleLabel = NSTextField(labelWithString: "会话信息")
+        let titleLabel = NSTextField(labelWithString: L(.detail_session_info))
         titleLabel.font = NSFont.boldSystemFont(ofSize: 14)
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         section.addSubview(titleLabel)
@@ -275,13 +275,13 @@ class TaskCenterDetailViewController: NSViewController {
         infoBox.addSubview(idLabel)
         yOffset -= lineHeight
 
-        let statusLabel = NSTextField(labelWithString: "状态: \(statusText(for: session.currentStatus))")
+        let statusLabel = NSTextField(labelWithString: "\(L(.detail_status)) \(statusText(for: session.currentStatus))")
         statusLabel.font = NSFont.systemFont(ofSize: 12)
         statusLabel.frame = NSRect(x: 10, y: yOffset, width: 390, height: lineHeight)
         infoBox.addSubview(statusLabel)
         yOffset -= lineHeight
 
-        let projectLabel = NSTextField(labelWithString: "项目: \(shortenPath(session.project))")
+        let projectLabel = NSTextField(labelWithString: "\(L(.detail_project)) \(shortenPath(session.project))")
         projectLabel.font = NSFont.systemFont(ofSize: 12)
         projectLabel.toolTip = session.project
         projectLabel.frame = NSRect(x: 10, y: yOffset, width: 390, height: lineHeight)
@@ -308,7 +308,7 @@ class TaskCenterDetailViewController: NSViewController {
         let section = NSView()
         let timeline = summary?.timeline ?? []
 
-        let titleLabel = NSTextField(labelWithString: "进度时间线 (\(timeline.count))")
+        let titleLabel = NSTextField(labelWithString: "\(L(.detail_timeline)) (\(timeline.count))")
         titleLabel.font = NSFont.boldSystemFont(ofSize: 14)
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         section.addSubview(titleLabel)
@@ -328,7 +328,7 @@ class TaskCenterDetailViewController: NSViewController {
         let timelineContentView = FlippedView(frame: NSRect(x: 0, y: 0, width: 380, height: contentHeight))
 
         if timeline.isEmpty {
-            let emptyLabel = NSTextField(labelWithString: "暂无时间线数据")
+            let emptyLabel = NSTextField(labelWithString: L(.detail_timeline_empty))
             emptyLabel.font = NSFont.systemFont(ofSize: 13)
             emptyLabel.textColor = .secondaryLabelColor
             emptyLabel.frame = NSRect(x: 10, y: 10, width: 360, height: 20)
@@ -415,7 +415,7 @@ class TaskCenterDetailViewController: NSViewController {
         let completedTodos = todos.filter { $0.status == "completed" }
         let pendingTodos = todos.filter { $0.status != "completed" }
 
-        let titleLabel = NSTextField(labelWithString: "Todo (\(completedTodos.count)/\(todos.count))")
+        let titleLabel = NSTextField(labelWithString: "\(L(.detail_todo)) (\(completedTodos.count)/\(todos.count))")
         titleLabel.font = NSFont.boldSystemFont(ofSize: 14)
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         section.addSubview(titleLabel)
@@ -443,14 +443,14 @@ class TaskCenterDetailViewController: NSViewController {
         var yOffset: CGFloat = 3
 
         // Pending section
-        let pendingTitle = NSTextField(labelWithString: "⏳ 待完成 (\(pendingTodos.count))")
+        let pendingTitle = NSTextField(labelWithString: "⏳ \(L(.detail_todo_pending)) (\(pendingTodos.count))")
         pendingTitle.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         pendingTitle.frame = NSRect(x: 10, y: yOffset, width: 370, height: 22)
         todosContentView.addSubview(pendingTitle)
         yOffset += sectionTitleHeight
 
         if pendingTodos.isEmpty {
-            let emptyLabel = NSTextField(labelWithString: "暂无")
+            let emptyLabel = NSTextField(labelWithString: L(.detail_todo_none))
             emptyLabel.font = NSFont.systemFont(ofSize: 12)
             emptyLabel.textColor = .tertiaryLabelColor
             emptyLabel.frame = NSRect(x: 20, y: yOffset, width: 360, height: 20)
@@ -470,14 +470,14 @@ class TaskCenterDetailViewController: NSViewController {
 
         // Completed section
         yOffset += spacing
-        let completedTitle = NSTextField(labelWithString: "✅ 已完成 (\(completedTodos.count))")
+        let completedTitle = NSTextField(labelWithString: "✅ \(L(.detail_todo_completed)) (\(completedTodos.count))")
         completedTitle.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         completedTitle.frame = NSRect(x: 10, y: yOffset, width: 370, height: 22)
         todosContentView.addSubview(completedTitle)
         yOffset += sectionTitleHeight
 
         if completedTodos.isEmpty {
-            let emptyLabel = NSTextField(labelWithString: "暂无")
+            let emptyLabel = NSTextField(labelWithString: L(.detail_todo_none))
             emptyLabel.font = NSFont.systemFont(ofSize: 12)
             emptyLabel.textColor = .tertiaryLabelColor
             emptyLabel.frame = NSRect(x: 20, y: yOffset, width: 360, height: 20)
@@ -536,11 +536,11 @@ class TaskCenterDetailViewController: NSViewController {
 
     private func statusText(for status: String) -> String {
         switch status {
-        case "working", "executing_tool", "subagent_working": return "🟢 工作中"
-        case "idle": return "🟡 空闲"
-        case "waiting_for_user": return "🔴 等待决策"
-        case "waiting_permission": return "🔐 等待权限"
-        case "completed": return "✅ 已完成"
+        case "working", "executing_tool", "subagent_working": return "🟢 " + L(.task_status_working)
+        case "idle": return "🟡 " + L(.task_status_idle)
+        case "waiting_for_user": return "🔴 " + L(.task_status_waiting)
+        case "waiting_permission": return "🔐 " + L(.task_status_permission)
+        case "completed": return "✅ " + L(.task_status_completed)
         default: return status
         }
     }
@@ -585,16 +585,16 @@ class TaskCenterDetailViewController: NSViewController {
     }
 
     @objc private func copyTapped() {
-        var text = "任务: \(session.originalGoal)\n"
-        text += "状态: \(session.currentStatus)\n"
-        text += "项目: \(session.project)\n"
+        var text = "\(L(.copy_task)) \(session.originalGoal)\n"
+        text += "\(L(.copy_status)) \(session.currentStatus)\n"
+        text += "\(L(.copy_project)) \(session.project)\n"
 
         if let progress = summary?.progress {
-            text += "进度: \(progress.completed)/\(progress.total)\n"
+            text += "\(L(.copy_progress)) \(progress.completed)/\(progress.total)\n"
         }
 
         if let timeline = summary?.timeline, !timeline.isEmpty {
-            text += "\n时间线:\n"
+            text += "\n\(L(.copy_timeline))\n"
             for node in timeline {
                 text += "  \(node.time) \(node.title): \(node.fullDescription)\n"
             }

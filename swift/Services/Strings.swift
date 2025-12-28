@@ -38,6 +38,7 @@ enum StringKey: String, CaseIterable {
 
     // ========== Session Detail ==========
     case detail_back
+    case detail_back_list
     case detail_jump_terminal
     case detail_copy_summary
     case detail_original_goal
@@ -47,6 +48,9 @@ enum StringKey: String, CaseIterable {
     case detail_todo_pending
     case detail_todo_completed
     case detail_todo_none
+    case detail_session_info
+    case detail_status
+    case detail_project
 
     // ========== Settings Window ==========
     case settings_title
@@ -201,6 +205,10 @@ struct Strings {
         .detail_todo_pending: [.english: "Pending", .chinese: "待完成"],
         .detail_todo_completed: [.english: "Completed", .chinese: "已完成"],
         .detail_todo_none: [.english: "None", .chinese: "暂无"],
+        .detail_back_list: [.english: "← Back to List", .chinese: "← 返回列表"],
+        .detail_session_info: [.english: "Session Info", .chinese: "会话信息"],
+        .detail_status: [.english: "Status:", .chinese: "状态:"],
+        .detail_project: [.english: "Project:", .chinese: "项目:"],
 
         // ========== Settings Window ==========
         .settings_title: [.english: "ClaudeMonitor Settings", .chinese: "ClaudeMonitor 设置"],
