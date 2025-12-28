@@ -104,6 +104,7 @@ class TaskFilterBar: NSView {
         refreshButton.title = L(.session_list_refresh)
         if #available(macOS 11.0, *) {
             refreshButton.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: "Refresh")
+            refreshButton.imagePosition = .imageLeading
         }
         refreshButton.translatesAutoresizingMaskIntoConstraints = false
         refreshButton.target = self

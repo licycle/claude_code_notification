@@ -365,16 +365,16 @@ class DatabaseManager {
         let interval = now.timeIntervalSince(date)
 
         if interval < 60 {
-            return "刚刚"
+            return L(.time_just_now)
         } else if interval < 3600 {
             let minutes = Int(interval / 60)
-            return "\(minutes)分钟前"
+            return "\(minutes)" + L(.time_minutes_ago)
         } else if interval < 86400 {
             let hours = Int(interval / 3600)
-            return "\(hours)小时前"
+            return "\(hours)" + L(.time_hours_ago)
         } else {
             let days = Int(interval / 86400)
-            return "\(days)天前"
+            return "\(days)" + L(.time_days_ago)
         }
     }
 }

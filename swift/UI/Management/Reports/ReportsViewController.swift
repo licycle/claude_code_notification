@@ -7,6 +7,7 @@ class ReportsViewController: NSViewController {
     private var tabView: NSSegmentedControl!
     private var contentView: NSView!
     private var dailyReportView: DailyReportView?
+    private var comingSoonLabel: NSTextField?
 
     override func loadView() {
         view = NSView(frame: NSRect(x: 0, y: 0, width: 720, height: 600))
@@ -16,12 +17,37 @@ class ReportsViewController: NSViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         setupUI()
+        setupLanguageObserver()
         showDailyReport()
+    }
+
+    private func setupLanguageObserver() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(languageDidChange),
+            name: LocalizationManager.languageChangedNotification,
+            object: nil
+        )
+    }
+
+    @objc private func languageDidChange() {
+        updateTabLabels()
+        comingSoonLabel?.stringValue = L(.report_coming_soon)
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    private func updateTabLabels() {
+        tabView.setLabel(L(.report_daily), forSegment: 0)
+        tabView.setLabel(L(.report_weekly), forSegment: 1)
+        tabView.setLabel(L(.report_monthly), forSegment: 2)
     }
 
     private func setupUI() {
         // Tab control
-        tabView = NSSegmentedControl(labels: ["日报", "周报", "月报"], trackingMode: .selectOne, target: self, action: #selector(tabChanged(_:)))
+        tabView = NSSegmentedControl(labels: [L(.report_daily), L(.report_weekly), L(.report_monthly)], trackingMode: .selectOne, target: self, action: #selector(tabChanged(_:)))
         tabView.selectedSegment = 0
         tabView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(tabView)
@@ -46,14 +72,15 @@ class ReportsViewController: NSViewController {
     @objc private func tabChanged(_ sender: NSSegmentedControl) {
         switch sender.selectedSegment {
         case 0: showDailyReport()
-        case 1: showComingSoon("周报")
-        case 2: showComingSoon("月报")
+        case 1: showComingSoon()
+        case 2: showComingSoon()
         default: break
         }
     }
 
     private func showDailyReport() {
         contentView.subviews.forEach { $0.removeFromSuperview() }
+        comingSoonLabel = nil
 
         if dailyReportView == nil {
             dailyReportView = DailyReportView()
@@ -72,14 +99,15 @@ class ReportsViewController: NSViewController {
         dailyReportView!.refresh()
     }
 
-    private func showComingSoon(_ title: String) {
+    private func showComingSoon() {
         contentView.subviews.forEach { $0.removeFromSuperview() }
 
-        let label = NSTextField(labelWithString: "\(title)功能即将推出...")
+        let label = NSTextField(labelWithString: L(.report_coming_soon))
         label.font = NSFont.systemFont(ofSize: 16)
         label.textColor = .secondaryLabelColor
         label.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(label)
+        comingSoonLabel = label
 
         NSLayoutConstraint.activate([
             label.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),

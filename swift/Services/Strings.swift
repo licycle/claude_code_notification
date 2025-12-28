@@ -151,11 +151,14 @@ enum StringKey: String, CaseIterable {
 
     // ========== Reports ==========
     case report_daily
+    case report_weekly
+    case report_monthly
     case report_today
     case report_total_sessions
     case report_completed
     case report_working
     case report_waiting
+    case report_coming_soon
 
     // ========== Copy Summary Text ==========
     case copy_task
@@ -168,6 +171,31 @@ enum StringKey: String, CaseIterable {
     case notification_jump
     case notification_dismiss
     case notification_view_details
+
+    // ========== Timeline Events ==========
+    case timeline_start_task
+    case timeline_task_started
+    case timeline_idle
+    case timeline_waiting_new_task
+    case timeline_working
+    case timeline_executing_task
+    case timeline_waiting_decision
+    case timeline_needs_user_input
+    case timeline_waiting_permission
+    case timeline_needs_permission
+    case timeline_task_complete
+    case timeline_all_steps_done
+    case timeline_rate_limited
+    case timeline_api_limited
+    case timeline_progress_update
+    case timeline_progress_done
+    case timeline_user_input
+    case timeline_continue_chat
+    case timeline_ai_summary
+    case timeline_current_task
+    case timeline_progress
+    case timeline_next_step
+    case timeline_pending_decision
 }
 
 // MARK: - String Translations
@@ -309,11 +337,14 @@ struct Strings {
 
         // ========== Reports ==========
         .report_daily: [.english: "Daily", .chinese: "日报"],
+        .report_weekly: [.english: "Weekly", .chinese: "周报"],
+        .report_monthly: [.english: "Monthly", .chinese: "月报"],
         .report_today: [.english: "Today's Report", .chinese: "今日报告"],
         .report_total_sessions: [.english: "Total Sessions", .chinese: "总会话"],
         .report_completed: [.english: "Completed", .chinese: "已完成"],
         .report_working: [.english: "Working", .chinese: "工作中"],
         .report_waiting: [.english: "Waiting", .chinese: "等待中"],
+        .report_coming_soon: [.english: "Coming soon...", .chinese: "功能即将推出..."],
 
         // ========== Copy Summary Text ==========
         .copy_task: [.english: "Task:", .chinese: "任务:"],
@@ -325,7 +356,32 @@ struct Strings {
         // ========== Notification Actions ==========
         .notification_jump: [.english: "Jump to Terminal", .chinese: "跳转到终端"],
         .notification_dismiss: [.english: "Dismiss", .chinese: "稍后处理"],
-        .notification_view_details: [.english: "View Details", .chinese: "查看详情"]
+        .notification_view_details: [.english: "View Details", .chinese: "查看详情"],
+
+        // ========== Timeline Events ==========
+        .timeline_start_task: [.english: "Start Task", .chinese: "开始任务"],
+        .timeline_task_started: [.english: "Task started", .chinese: "任务开始"],
+        .timeline_idle: [.english: "Idle", .chinese: "空闲"],
+        .timeline_waiting_new_task: [.english: "Waiting for new task", .chinese: "等待新任务"],
+        .timeline_working: [.english: "Working", .chinese: "工作中"],
+        .timeline_executing_task: [.english: "Executing task", .chinese: "正在执行任务"],
+        .timeline_waiting_decision: [.english: "Waiting for Decision", .chinese: "等待决策"],
+        .timeline_needs_user_input: [.english: "Needs user input", .chinese: "需要用户输入"],
+        .timeline_waiting_permission: [.english: "Waiting for Permission", .chinese: "等待权限"],
+        .timeline_needs_permission: [.english: "Needs permission confirmation", .chinese: "需要权限确认"],
+        .timeline_task_complete: [.english: "Task Complete", .chinese: "任务完成"],
+        .timeline_all_steps_done: [.english: "All steps completed", .chinese: "已完成全部步骤"],
+        .timeline_rate_limited: [.english: "Rate Limited", .chinese: "限流"],
+        .timeline_api_limited: [.english: "API request limited", .chinese: "API 请求受限"],
+        .timeline_progress_update: [.english: "Progress Update", .chinese: "进度更新"],
+        .timeline_progress_done: [.english: "Completed", .chinese: "已完成"],
+        .timeline_user_input: [.english: "User Input", .chinese: "用户输入"],
+        .timeline_continue_chat: [.english: "Continue conversation", .chinese: "继续对话"],
+        .timeline_ai_summary: [.english: "AI Summary", .chinese: "AI 总结"],
+        .timeline_current_task: [.english: "Current task:", .chinese: "当前任务:"],
+        .timeline_progress: [.english: "Progress:", .chinese: "进度:"],
+        .timeline_next_step: [.english: "Next step:", .chinese: "下一步:"],
+        .timeline_pending_decision: [.english: "Pending decision:", .chinese: "待决策:"]
     ]
 
     // MARK: - Lookup

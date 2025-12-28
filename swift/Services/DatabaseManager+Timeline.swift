@@ -80,12 +80,12 @@ extension DatabaseManager {
                 case "goal_set":
                     let timeStr = formatTime(eventTime)
                     let desc = String(content.prefix(50))
-                    let fullDesc = content.isEmpty ? "任务开始" : content
+                    let fullDesc = content.isEmpty ? L(.timeline_task_started) : content
                     node = TimelineNode(
                         time: timeStr,
                         type: "start",
-                        title: "开始任务",
-                        description: desc.isEmpty ? "任务开始" : desc,
+                        title: L(.timeline_start_task),
+                        description: desc.isEmpty ? L(.timeline_task_started) : desc,
                         fullDescription: fullDesc,
                         status: "completed"
                     )
@@ -102,54 +102,54 @@ extension DatabaseManager {
                         node = TimelineNode(
                             time: timeStr,
                             type: "idle",
-                            title: "空闲",
-                            description: "等待新任务",
-                            fullDescription: "等待新任务",
+                            title: L(.timeline_idle),
+                            description: L(.timeline_waiting_new_task),
+                            fullDescription: L(.timeline_waiting_new_task),
                             status: "completed"
                         )
                     case "working":
                         node = TimelineNode(
                             time: timeStr,
                             type: "working",
-                            title: "工作中",
-                            description: "正在执行任务",
-                            fullDescription: "正在执行任务",
+                            title: L(.timeline_working),
+                            description: L(.timeline_executing_task),
+                            fullDescription: L(.timeline_executing_task),
                             status: "completed"
                         )
                     case "waiting_for_user":
                         node = TimelineNode(
                             time: timeStr,
                             type: "waiting",
-                            title: "等待决策",
-                            description: "需要用户输入",
-                            fullDescription: "需要用户输入",
+                            title: L(.timeline_waiting_decision),
+                            description: L(.timeline_needs_user_input),
+                            fullDescription: L(.timeline_needs_user_input),
                             status: "current"
                         )
                     case "waiting_permission":
                         node = TimelineNode(
                             time: timeStr,
                             type: "permission",
-                            title: "等待权限",
-                            description: "需要权限确认",
-                            fullDescription: "需要权限确认",
+                            title: L(.timeline_waiting_permission),
+                            description: L(.timeline_needs_permission),
+                            fullDescription: L(.timeline_needs_permission),
                             status: "current"
                         )
                     case "completed":
                         node = TimelineNode(
                             time: timeStr,
                             type: "complete",
-                            title: "任务完成",
-                            description: "已完成全部步骤",
-                            fullDescription: "已完成全部步骤",
+                            title: L(.timeline_task_complete),
+                            description: L(.timeline_all_steps_done),
+                            fullDescription: L(.timeline_all_steps_done),
                             status: "completed"
                         )
                     case "rate_limited":
                         node = TimelineNode(
                             time: timeStr,
                             type: "rate_limited",
-                            title: "限流",
-                            description: "API 请求受限",
-                            fullDescription: "API 请求受限",
+                            title: L(.timeline_rate_limited),
+                            description: L(.timeline_api_limited),
+                            fullDescription: L(.timeline_api_limited),
                             status: "current"
                         )
                     default:
@@ -163,11 +163,11 @@ extension DatabaseManager {
 
                     // 每次进度更新都显示
                     if completed > lastCompletedCount {
-                        let desc = "已完成 \(completed)/\(total) 项"
+                        let desc = "\(L(.timeline_progress_done)) \(completed)/\(total)"
                         node = TimelineNode(
                             time: timeStr,
                             type: "progress",
-                            title: "进度更新",
+                            title: L(.timeline_progress_update),
                             description: desc,
                             fullDescription: desc,
                             status: completed == total && total > 0 ? "completed" : "current"
@@ -178,32 +178,32 @@ extension DatabaseManager {
                 case "user_input":
                     let timeStr = formatTime(eventTime)
                     let desc = String(content.prefix(50))
-                    let fullDesc = content.isEmpty ? "继续对话" : content
+                    let fullDesc = content.isEmpty ? L(.timeline_continue_chat) : content
                     node = TimelineNode(
                         time: timeStr,
                         type: "input",
-                        title: "用户输入",
-                        description: desc.isEmpty ? "继续对话" : desc,
+                        title: L(.timeline_user_input),
+                        description: desc.isEmpty ? L(.timeline_continue_chat) : desc,
                         fullDescription: fullDesc,
                         status: "completed"
                     )
 
                 case "ai_summary":
                     let timeStr = formatTime(eventTime)
-                    let currentTask = content.isEmpty ? (metadata["current_task"] as? String ?? "AI 分析") : content
+                    let currentTask = content.isEmpty ? (metadata["current_task"] as? String ?? L(.timeline_ai_summary)) : content
 
                     // 构建完整描述（用于 hover popover）
                     var fullParts: [String] = []
-                    fullParts.append("当前任务: \(currentTask)")
+                    fullParts.append("\(L(.timeline_current_task)) \(currentTask)")
 
                     if let progress = metadata["progress_summary"] as? String, !progress.isEmpty {
-                        fullParts.append("进度: \(progress)")
+                        fullParts.append("\(L(.timeline_progress)) \(progress)")
                     }
                     if let nextStep = metadata["next_step"] as? String, !nextStep.isEmpty {
-                        fullParts.append("下一步: \(nextStep)")
+                        fullParts.append("\(L(.timeline_next_step)) \(nextStep)")
                     }
                     if let pending = metadata["pending_decision"] as? String, !pending.isEmpty {
-                        fullParts.append("待决策: \(pending)")
+                        fullParts.append("\(L(.timeline_pending_decision)) \(pending)")
                     }
 
                     let fullDesc = fullParts.joined(separator: "\n")
@@ -211,7 +211,7 @@ extension DatabaseManager {
                     node = TimelineNode(
                         time: timeStr,
                         type: "ai_summary",
-                        title: "AI 总结",
+                        title: L(.timeline_ai_summary),
                         description: currentTask,
                         fullDescription: fullDesc,
                         status: "completed"

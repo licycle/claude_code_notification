@@ -161,21 +161,21 @@ func registerNotificationCategories() {
     // Jump to terminal action
     let jumpAction = UNNotificationAction(
         identifier: "JUMP_ACTION",
-        title: "跳转到终端",
+        title: L(.notification_jump),
         options: [.foreground]
     )
 
     // Dismiss action
     let dismissAction = UNNotificationAction(
         identifier: "DISMISS_ACTION",
-        title: "稍后处理",
+        title: L(.notification_dismiss),
         options: []
     )
 
     // View details action
     let viewAction = UNNotificationAction(
         identifier: "VIEW_ACTION",
-        title: "查看详情",
+        title: L(.notification_view_details),
         options: [.foreground]
     )
 
