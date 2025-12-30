@@ -32,8 +32,43 @@ if [ -d "$INSTALL_DIR" ]; then
 fi
 
 if [ -d "$BASE_DIR" ]; then
-    rm -rf "$BASE_DIR"
-    echo "Removed Config: $BASE_DIR"
+    # Check for API profiles that user might want to keep
+    API_PROFILES="$BASE_DIR/api_profiles.json"
+    if [ -f "$API_PROFILES" ]; then
+        # Check if it has any profiles
+        has_profiles=$(python3 -c "
+import json
+try:
+    with open('$API_PROFILES') as f:
+        c = json.load(f)
+    if c: print('yes')
+except: pass
+" 2>/dev/null)
+
+        if [ "$has_profiles" = "yes" ]; then
+            cecho "${YELLOW}Found API profiles: $API_PROFILES${NC}"
+            printf "Keep API profiles for reuse? [Y/n]: "
+            read keep_api
+            if [ "$keep_api" != "n" ] && [ "$keep_api" != "N" ]; then
+                # Backup API profiles before removing directory
+                cp "$API_PROFILES" "/tmp/claude_api_profiles_backup.json"
+                rm -rf "$BASE_DIR"
+                # Restore API profiles
+                mkdir -p "$BASE_DIR"
+                mv "/tmp/claude_api_profiles_backup.json" "$API_PROFILES"
+                echo "Removed Config: $BASE_DIR (kept api_profiles.json)"
+            else
+                rm -rf "$BASE_DIR"
+                echo "Removed Config: $BASE_DIR"
+            fi
+        else
+            rm -rf "$BASE_DIR"
+            echo "Removed Config: $BASE_DIR"
+        fi
+    else
+        rm -rf "$BASE_DIR"
+        echo "Removed Config: $BASE_DIR"
+    fi
 fi
 
 if [ -d "$DATA_DIR" ]; then

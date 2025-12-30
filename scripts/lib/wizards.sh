@@ -7,6 +7,35 @@
 # Run API profile setup wizard
 # Requires: API_MANAGER_SCRIPT, GREEN, BLUE, YELLOW, RED, NC, cecho() from common.sh
 run_api_wizard() {
+    local api_profiles_file="$HOME/.claude-hooks/api_profiles.json"
+
+    # Check if existing API profiles exist
+    if [ -f "$api_profiles_file" ]; then
+        local profile_list=$(python3 -c "
+import json
+try:
+    with open('$api_profiles_file') as f:
+        c = json.load(f)
+    if c:
+        print(', '.join(c.keys()))
+except: pass
+" 2>/dev/null)
+
+        if [ -n "$profile_list" ]; then
+            cecho "\n${GREEN}Found existing API profiles: ${profile_list}${NC}"
+            printf "Keep existing profiles? [Y/n]: "
+            read keep_profiles
+            if [ "$keep_profiles" != "n" ] && [ "$keep_profiles" != "N" ]; then
+                cecho "✅ Using existing API profiles"
+                printf "Add more profiles? [y/N]: "
+                read add_more
+                if [ "$add_more" != "y" ] && [ "$add_more" != "Y" ]; then
+                    return 0
+                fi
+            fi
+        fi
+    fi
+
     cecho "\n${BLUE}--- API Profiles Setup ---${NC}"
     cecho "Add API profiles for third-party providers (Kimi, Qwen, DeepSeek, etc.)"
     cecho "Usage: ${GREEN}c --api <profile_name>${NC}"
