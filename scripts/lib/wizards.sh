@@ -72,6 +72,29 @@ run_api_wizard() {
 run_summary_wizard() {
     local tracker_config="$1"
 
+    # Check if existing valid configuration exists
+    if [ -f "$tracker_config" ]; then
+        local has_api=$(python3 -c "
+import json
+try:
+    with open('$tracker_config') as f:
+        c = json.load(f)
+    if c.get('summary',{}).get('third_party',{}).get('api_key'):
+        print('yes')
+except: pass
+" 2>/dev/null)
+
+        if [ "$has_api" = "yes" ]; then
+            cecho "\n${GREEN}Found existing AI Summary configuration${NC}"
+            printf "Keep existing configuration? [Y/n]: "
+            read keep_config
+            if [ "$keep_config" != "n" ] && [ "$keep_config" != "N" ]; then
+                cecho "✅ Using existing AI Summary configuration"
+                return 0
+            fi
+        fi
+    fi
+
     cecho "\n${BLUE}--- AI Summary Setup ---${NC}"
     cecho "AI Summary uses a third-party API to generate intelligent task summaries."
     cecho "If disabled, notifications will show raw user prompts directly."
@@ -93,21 +116,31 @@ run_summary_wizard() {
         if [ -n "$summary_api_key" ]; then
             python3 << PYEOF
 import json
-config = {
-    "summary": {
-        "provider": "third_party",
-        "third_party": {
-            "enabled": True,
-            "base_url": "$summary_base_url",
-            "api_key": "$summary_api_key",
-            "model": "$summary_model",
-            "max_tokens": 500
-        }
-    },
-    "notification": {"enabled": True, "show_progress": True}
+import os
+
+# Load existing config to preserve other settings (like language)
+existing = {}
+if os.path.exists("$tracker_config"):
+    try:
+        with open("$tracker_config") as f:
+            existing = json.load(f)
+    except: pass
+
+# Update summary config
+existing["summary"] = {
+    "provider": "third_party",
+    "third_party": {
+        "enabled": True,
+        "base_url": "$summary_base_url",
+        "api_key": "$summary_api_key",
+        "model": "$summary_model",
+        "max_tokens": 500
+    }
 }
+existing.setdefault("notification", {"enabled": True, "show_progress": True})
+
 with open("$tracker_config", "w") as f:
-    json.dump(config, f, indent=2)
+    json.dump(existing, f, indent=2)
 print("✅ AI Summary enabled")
 PYEOF
         else
@@ -116,15 +149,25 @@ PYEOF
     else
         python3 << PYEOF
 import json
-config = {
-    "summary": {
-        "provider": "disabled",
-        "disabled": True
-    },
-    "notification": {"enabled": True, "show_progress": True}
+import os
+
+# Load existing config to preserve other settings (like language)
+existing = {}
+if os.path.exists("$tracker_config"):
+    try:
+        with open("$tracker_config") as f:
+            existing = json.load(f)
+    except: pass
+
+# Update summary config (disabled)
+existing["summary"] = {
+    "provider": "disabled",
+    "disabled": True
 }
+existing.setdefault("notification", {"enabled": True, "show_progress": True})
+
 with open("$tracker_config", "w") as f:
-    json.dump(config, f, indent=2)
+    json.dump(existing, f, indent=2)
 print("✅ AI Summary disabled (raw display mode)")
 PYEOF
     fi

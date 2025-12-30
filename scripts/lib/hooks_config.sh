@@ -29,8 +29,14 @@ tracker_snapshot_hook = f"{base_dir}/task_tracker/hooks/snapshot_hook.py"
 tracker_permission_hook = f"{base_dir}/task_tracker/hooks/permission_tracker.py"
 tracker_pre_tool_hook = f"{base_dir}/task_tracker/hooks/pre_tool_tracker.py"
 tracker_subagent_hook = f"{base_dir}/task_tracker/hooks/subagent_tracker.py"
+tracker_session_start_hook = f"{base_dir}/task_tracker/hooks/session_start_hook.py"
 
 hooks_config = {
+    "SessionStart": [
+        {
+            "hooks": [{"type": "command", "command": f"python3 {tracker_session_start_hook}", "timeout": 5}]
+        }
+    ],
     "UserPromptSubmit": [
         {
             "hooks": [{"type": "command", "command": f"python3 {tracker_goal_hook}", "timeout": 5}]
@@ -119,6 +125,7 @@ install_task_tracker() {
     cp "$tracker_src/hooks/snapshot_hook.py" "$tracker_dir/hooks/"
     cp "$tracker_src/hooks/session_cleanup.py" "$tracker_dir/hooks/"
     cp "$tracker_src/hooks/session_init.py" "$tracker_dir/hooks/"
+    cp "$tracker_src/hooks/session_start_hook.py" "$tracker_dir/hooks/"
     cp "$tracker_src/hooks/permission_tracker.py" "$tracker_dir/hooks/"
     cp "$tracker_src/hooks/pre_tool_tracker.py" "$tracker_dir/hooks/"
     cp "$tracker_src/hooks/subagent_tracker.py" "$tracker_dir/hooks/"

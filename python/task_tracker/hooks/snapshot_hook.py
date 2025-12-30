@@ -20,7 +20,8 @@ from utils import (
 )
 from services.database import (
     get_session, update_session_status, save_snapshot,
-    get_progress, get_pending_decisions
+    get_progress, get_pending_decisions, update_session_usage,
+    get_last_processed_line
 )
 from services.db_timeline import add_timeline_event
 from services.summary_service import get_summary_service
@@ -114,6 +115,87 @@ def notify_rate_limit(session_id: str, project_name: str, keyword: str):
     )
 
 
+def calculate_usage_stats(events):
+    """Calculate input/output usage from transcript events
+
+    Uses actual token counts from Anthropic API responses when available.
+    Falls back to character counting for estimation.
+
+    Returns:
+        dict with input_chars, output_chars, input_words, output_words,
+        and actual_input_tokens, actual_output_tokens from API
+    """
+    input_chars = 0
+    output_chars = 0
+    input_words = 0
+    output_words = 0
+    # Actual token counts from API
+    actual_input_tokens = 0
+    actual_output_tokens = 0
+
+    for event in events:
+        event_type = event.get('type', '')
+
+        if event_type == 'user':
+            # User input - count characters for reference
+            message = event.get('message', {})
+            if isinstance(message, dict):
+                content = message.get('content', '')
+                if isinstance(content, str):
+                    input_chars += len(content)
+                    input_words += len(content.split())
+                elif isinstance(content, list):
+                    for block in content:
+                        if isinstance(block, dict):
+                            text = block.get('text', '')
+                            if text:
+                                input_chars += len(text)
+                                input_words += len(text.split())
+            elif isinstance(message, str):
+                input_chars += len(message)
+                input_words += len(message.split())
+
+        elif event_type == 'assistant':
+            # Assistant output - get actual token counts from API response
+            message = event.get('message', {})
+            if isinstance(message, dict):
+                # Get actual token counts from usage field
+                usage = message.get('usage', {})
+                if usage:
+                    # input_tokens includes cache tokens
+                    api_input = usage.get('input_tokens', 0)
+                    cache_creation = usage.get('cache_creation_input_tokens', 0)
+                    cache_read = usage.get('cache_read_input_tokens', 0)
+                    # Total input = input_tokens + cache tokens
+                    actual_input_tokens += api_input + cache_creation + cache_read
+                    actual_output_tokens += usage.get('output_tokens', 0)
+
+                # Also count characters for reference
+                content = message.get('content', '')
+                if isinstance(content, str):
+                    output_chars += len(content)
+                    output_words += len(content.split())
+                elif isinstance(content, list):
+                    for block in content:
+                        if isinstance(block, dict):
+                            text = block.get('text', '')
+                            if text:
+                                output_chars += len(text)
+                                output_words += len(text.split())
+            elif isinstance(message, str):
+                output_chars += len(message)
+                output_words += len(message.split())
+
+    return {
+        'input_chars': input_chars,
+        'output_chars': output_chars,
+        'input_words': input_words,
+        'output_words': output_words,
+        'actual_input_tokens': actual_input_tokens,
+        'actual_output_tokens': actual_output_tokens
+    }
+
+
 def main():
     log("SNAPSHOT", "Hook triggered")
 
@@ -142,10 +224,49 @@ def main():
 
     # Parse transcript
     events = []
+    total_lines = 0
     if transcript_path:
         log("SNAPSHOT", f"Parsing transcript: {transcript_path}")
-        events = parse_transcript(transcript_path)
-        log("SNAPSHOT", f"Found {len(events)} events")
+
+        # Get last processed line for incremental token counting
+        last_line = get_last_processed_line(session_id)
+
+        # Parse full transcript for other features (extract messages, todos, etc.)
+        events, total_lines = parse_transcript(transcript_path)
+        log("SNAPSHOT", f"Found {len(events)} events, total lines: {total_lines}")
+
+        # For token counting, only process new events (incremental)
+        if last_line > 0 and last_line < total_lines:
+            new_events, _ = parse_transcript(transcript_path, start_line=last_line)
+            log("SNAPSHOT", f"Incremental: processing {len(new_events)} new events (from line {last_line})")
+            usage_stats = calculate_usage_stats(new_events)
+            update_session_usage(
+                session_id,
+                input_chars=usage_stats['input_chars'],
+                output_chars=usage_stats['output_chars'],
+                input_words=usage_stats['input_words'],
+                output_words=usage_stats['output_words'],
+                actual_input_tokens=usage_stats['actual_input_tokens'],
+                actual_output_tokens=usage_stats['actual_output_tokens'],
+                last_processed_line=total_lines,
+                incremental=True
+            )
+            log("SNAPSHOT", f"Usage (incremental): +{usage_stats['actual_input_tokens']} input, +{usage_stats['actual_output_tokens']} output tokens")
+        else:
+            # First time or full reparse
+            usage_stats = calculate_usage_stats(events)
+            update_session_usage(
+                session_id,
+                input_chars=usage_stats['input_chars'],
+                output_chars=usage_stats['output_chars'],
+                input_words=usage_stats['input_words'],
+                output_words=usage_stats['output_words'],
+                actual_input_tokens=usage_stats['actual_input_tokens'],
+                actual_output_tokens=usage_stats['actual_output_tokens'],
+                last_processed_line=total_lines,
+                incremental=False
+            )
+            log("SNAPSHOT", f"Usage (full): {usage_stats['actual_input_tokens']} input, {usage_stats['actual_output_tokens']} output tokens")
 
     # Extract messages
     last_user = extract_last_message(events, 'user')

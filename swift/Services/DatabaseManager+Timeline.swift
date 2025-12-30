@@ -268,6 +268,55 @@ extension DatabaseManager {
         )
     }
 
+    /// 获取 timeline 的首尾时间戳用于计算工作时长
+    func getTimelineDuration(sessionId: String) -> (start: Date, end: Date)? {
+        guard openDatabase() else { return nil }
+        defer { closeDatabase() }
+
+        let query: String
+        let bindValue: String
+
+        if sessionId.hasPrefix("pending_") {
+            let pendingId = String(sessionId.dropFirst(8))
+            query = """
+                SELECT MIN(t.timestamp), MAX(t.timestamp)
+                FROM timeline t
+                JOIN sessions s ON t.session_pk = s.id
+                WHERE s.pending_id = ?
+                """
+            bindValue = pendingId
+        } else {
+            query = """
+                SELECT MIN(t.timestamp), MAX(t.timestamp)
+                FROM timeline t
+                JOIN sessions s ON t.session_pk = s.id
+                WHERE s.session_id = ?
+                """
+            bindValue = sessionId
+        }
+
+        var statement: OpaquePointer?
+        var result: (start: Date, end: Date)?
+
+        if sqlite3_prepare_v2(db, query, -1, &statement, nil) == SQLITE_OK {
+            sqlite3_bind_text(statement, 1, bindValue, -1, SQLITE_TRANSIENT)
+
+            if sqlite3_step(statement) == SQLITE_ROW {
+                let startStr = safeString(from: sqlite3_column_text(statement, 0))
+                let endStr = safeString(from: sqlite3_column_text(statement, 1))
+
+                if !startStr.isEmpty && !endStr.isEmpty,
+                   let startDate = dateFormatter.date(from: String(startStr.prefix(19))),
+                   let endDate = dateFormatter.date(from: String(endStr.prefix(19))) {
+                    result = (start: startDate, end: endDate)
+                }
+            }
+        }
+        sqlite3_finalize(statement)
+
+        return result
+    }
+
     func getSession(sessionId: String) -> SessionInfo? {
         guard openDatabase() else { return nil }
         defer { closeDatabase() }

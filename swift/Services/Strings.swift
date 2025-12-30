@@ -51,6 +51,8 @@ enum StringKey: String, CaseIterable {
     case detail_session_info
     case detail_status
     case detail_project
+    case detail_work_duration
+    case detail_token_usage
 
     // ========== Settings Window ==========
     case settings_title
@@ -196,6 +198,28 @@ enum StringKey: String, CaseIterable {
     case timeline_progress
     case timeline_next_step
     case timeline_pending_decision
+
+    // ========== Detail Tabs (New) ==========
+    case detail_tab_timeline
+    case detail_tab_prompts
+    case detail_tab_usage
+
+    // ========== Prompt History (New) ==========
+    case prompt_round_label
+    case prompt_chars
+    case prompt_tokens_estimated
+    case prompt_empty
+
+    // ========== Usage Stats (New) ==========
+    case usage_input_tokens
+    case usage_output_tokens
+    case usage_total_estimated
+    case usage_empty
+    case usage_chars
+    case usage_words
+
+    // ========== Resume Link (New) ==========
+    case detail_resumed_from
 }
 
 // MARK: - String Translations
@@ -237,6 +261,8 @@ struct Strings {
         .detail_session_info: [.english: "Session Info", .chinese: "会话信息"],
         .detail_status: [.english: "Status:", .chinese: "状态:"],
         .detail_project: [.english: "Project:", .chinese: "项目:"],
+        .detail_work_duration: [.english: "Duration:", .chinese: "时长:"],
+        .detail_token_usage: [.english: "Token:", .chinese: "Token:"],
 
         // ========== Settings Window ==========
         .settings_title: [.english: "ClaudeMonitor Settings", .chinese: "ClaudeMonitor 设置"],
@@ -381,7 +407,29 @@ struct Strings {
         .timeline_current_task: [.english: "Current task:", .chinese: "当前任务:"],
         .timeline_progress: [.english: "Progress:", .chinese: "进度:"],
         .timeline_next_step: [.english: "Next step:", .chinese: "下一步:"],
-        .timeline_pending_decision: [.english: "Pending decision:", .chinese: "待决策:"]
+        .timeline_pending_decision: [.english: "Pending decision:", .chinese: "待决策:"],
+
+        // ========== Detail Tabs (New) ==========
+        .detail_tab_timeline: [.english: "Timeline", .chinese: "时间线"],
+        .detail_tab_prompts: [.english: "Prompts", .chinese: "提示词"],
+        .detail_tab_usage: [.english: "Usage", .chinese: "用量"],
+
+        // ========== Prompt History (New) ==========
+        .prompt_round_label: [.english: "Round", .chinese: "第"],
+        .prompt_chars: [.english: "chars", .chinese: "字符"],
+        .prompt_tokens_estimated: [.english: "tokens (est.)", .chinese: "token (估算)"],
+        .prompt_empty: [.english: "No prompts recorded", .chinese: "暂无提示词记录"],
+
+        // ========== Usage Stats (New) ==========
+        .usage_input_tokens: [.english: "Input Tokens", .chinese: "输入 Token"],
+        .usage_output_tokens: [.english: "Output Tokens", .chinese: "输出 Token"],
+        .usage_total_estimated: [.english: "Total (Estimated)", .chinese: "总计 (估算)"],
+        .usage_empty: [.english: "No usage data", .chinese: "暂无用量数据"],
+        .usage_chars: [.english: "characters", .chinese: "字符"],
+        .usage_words: [.english: "words", .chinese: "单词"],
+
+        // ========== Resume Link (New) ==========
+        .detail_resumed_from: [.english: "Resumed from:", .chinese: "恢复自:"]
     ]
 
     // MARK: - Lookup

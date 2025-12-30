@@ -118,7 +118,11 @@ install_cli_scripts "$CLI_SRC" "$BASE_DIR"
 cecho "\n${BLUE}--- Installing Task Tracker ---${NC}"
 TRACKER_SRC="$SCRIPT_DIR/python/task_tracker"
 install_task_tracker "$TRACKER_SRC" "$TRACKER_DIR"
-run_summary_wizard "$TRACKER_DIR/config.json"
+
+# Summary config is stored in ~/.claude-task-tracker/ (shared with Swift/Python)
+SUMMARY_CONFIG_DIR="$HOME/.claude-task-tracker"
+mkdir -p "$SUMMARY_CONFIG_DIR"
+run_summary_wizard "$SUMMARY_CONFIG_DIR/config.json"
 
 # ================= Generate Shell Config =================
 cecho "${YELLOW}Generating Shell Integration...${NC}"

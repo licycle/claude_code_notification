@@ -22,6 +22,8 @@ class TaskCenterDetailViewController: NSViewController {
     private let session: SessionInfo
     private var summary: SessionSummary?
     private var summaryMode: String?
+    private var sessionUsage: SessionUsage?
+    private var timelineDuration: (start: Date, end: Date)?
     private var currentPopover: NSPopover?
 
     init(session: SessionInfo) {
@@ -43,6 +45,8 @@ class TaskCenterDetailViewController: NSViewController {
     private func loadData() {
         summary = DatabaseManager.shared.getSessionSummary(sessionId: session.sessionId)
         summaryMode = DatabaseManager.shared.getSummaryMode(sessionId: session.sessionId)
+        sessionUsage = DatabaseManager.shared.getSessionUsage(sessionId: session.sessionId)
+        timelineDuration = DatabaseManager.shared.getTimelineDuration(sessionId: session.sessionId)
     }
 
     private func setupUI() {
@@ -192,7 +196,7 @@ class TaskCenterDetailViewController: NSViewController {
             infoSection.topAnchor.constraint(equalTo: column.topAnchor, constant: 10),
             infoSection.leadingAnchor.constraint(equalTo: column.leadingAnchor),
             infoSection.trailingAnchor.constraint(equalTo: column.trailingAnchor),
-            infoSection.heightAnchor.constraint(equalToConstant: 120),
+            infoSection.heightAnchor.constraint(equalToConstant: 160),
 
             todoSection.topAnchor.constraint(equalTo: infoSection.bottomAnchor, constant: 10),
             todoSection.leadingAnchor.constraint(equalTo: column.leadingAnchor),
@@ -267,7 +271,7 @@ class TaskCenterDetailViewController: NSViewController {
 
         // 内部标签使用固定位置（相对于 infoBox）
         let lineHeight: CGFloat = 22
-        var yOffset: CGFloat = 70
+        var yOffset: CGFloat = 114
 
         let idLabel = NSTextField(labelWithString: "Session ID: \(session.sessionId.prefix(16))...")
         idLabel.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
@@ -286,6 +290,36 @@ class TaskCenterDetailViewController: NSViewController {
         projectLabel.toolTip = session.project
         projectLabel.frame = NSRect(x: 10, y: yOffset, width: 390, height: lineHeight)
         infoBox.addSubview(projectLabel)
+        yOffset -= lineHeight
+
+        // 工作时长（从 timeline 首尾节点计算）
+        let durationText: String
+        if let duration = timelineDuration {
+            durationText = formatDuration(from: duration.start, to: duration.end)
+        } else {
+            durationText = "-"
+        }
+        let durationLabel = NSTextField(labelWithString: "\(L(.detail_work_duration)) \(durationText)")
+        durationLabel.font = NSFont.systemFont(ofSize: 12)
+        durationLabel.frame = NSRect(x: 10, y: yOffset, width: 390, height: lineHeight)
+        infoBox.addSubview(durationLabel)
+        yOffset -= lineHeight
+
+        // Token 用量
+        if let usage = sessionUsage {
+            let tokenText = "↓\(usage.formattedInputTokens) ↑\(usage.formattedOutputTokens) (\(usage.formattedTotalTokens) total)"
+            let tokenLabel = NSTextField(labelWithString: "\(L(.detail_token_usage)) \(tokenText)")
+            tokenLabel.font = NSFont.systemFont(ofSize: 12)
+            tokenLabel.frame = NSRect(x: 10, y: yOffset, width: 390, height: lineHeight)
+            tokenLabel.toolTip = "\(L(.usage_input_tokens)): \(usage.estimatedInputTokens)\n\(L(.usage_output_tokens)): \(usage.estimatedOutputTokens)\n\(L(.usage_total_estimated)): \(usage.totalEstimatedTokens)"
+            infoBox.addSubview(tokenLabel)
+        } else {
+            let tokenLabel = NSTextField(labelWithString: "\(L(.detail_token_usage)) -")
+            tokenLabel.font = NSFont.systemFont(ofSize: 12)
+            tokenLabel.textColor = .tertiaryLabelColor
+            tokenLabel.frame = NSRect(x: 10, y: yOffset, width: 390, height: lineHeight)
+            infoBox.addSubview(tokenLabel)
+        }
 
         NSLayoutConstraint.activate([
             titleLabel.topAnchor.constraint(equalTo: section.topAnchor),
@@ -300,6 +334,21 @@ class TaskCenterDetailViewController: NSViewController {
         ])
 
         return section
+    }
+
+    /// 格式化时长
+    private func formatDuration(from start: Date, to end: Date) -> String {
+        let duration = end.timeIntervalSince(start)
+        let hours = Int(duration / 3600)
+        let minutes = Int((duration.truncatingRemainder(dividingBy: 3600)) / 60)
+
+        if hours > 0 {
+            return "\(hours)h \(minutes)m"
+        } else if minutes > 0 {
+            return "\(minutes)m"
+        } else {
+            return "<1m"
+        }
     }
 
     // MARK: - Timeline Section

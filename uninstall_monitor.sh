@@ -38,9 +38,9 @@ fi
 
 if [ -d "$DATA_DIR" ]; then
     cecho "${YELLOW}Found Task Tracker data: $DATA_DIR${NC}"
-    printf "Remove Task Tracker data (database, config)? [Y/n]: "
+    printf "Remove Task Tracker data (database, config)? [y/N]: "
     read remove_data
-    remove_data=${remove_data:-Y}
+    remove_data=${remove_data:-N}
     if [ "$remove_data" = "Y" ] || [ "$remove_data" = "y" ]; then
         rm -rf "$DATA_DIR"
         echo "Removed Data: $DATA_DIR"

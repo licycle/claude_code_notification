@@ -83,6 +83,15 @@ class SessionDetailViewController: NSViewController {
     /// 当前显示的 popover（用于显示节点详情）
     private var currentPopover: NSPopover?
 
+    /// Resume 链接（如果是从其他会话恢复的）
+    private var resumedFrom: String?
+
+    /// 会话用量统计
+    private var sessionUsage: SessionUsage?
+
+    /// 提示词历史
+    private var prompts: [PromptRecord] = []
+
     // MARK: - Initialization
 
     init(session: SessionInfo) {
@@ -114,7 +123,10 @@ class SessionDetailViewController: NSViewController {
     private func loadData() {
         summary = DatabaseManager.shared.getSessionSummary(sessionId: session.sessionId)
         summaryMode = DatabaseManager.shared.getSummaryMode(sessionId: session.sessionId)
-        log("DETAIL: Loaded summary for session \(session.sessionId), timeline count: \(summary?.timeline.count ?? 0), mode: \(summaryMode ?? "nil")")
+        resumedFrom = DatabaseManager.shared.getResumedFrom(sessionId: session.sessionId)
+        sessionUsage = DatabaseManager.shared.getSessionUsage(sessionId: session.sessionId)
+        prompts = DatabaseManager.shared.getPrompts(sessionId: session.sessionId)
+        log("DETAIL: Loaded summary for session \(session.sessionId), timeline count: \(summary?.timeline.count ?? 0), mode: \(summaryMode ?? "nil"), resumed: \(resumedFrom ?? "nil"), prompts: \(prompts.count)")
     }
 
     // MARK: - UI Setup
@@ -175,8 +187,17 @@ class SessionDetailViewController: NSViewController {
         let titleLabel = NSTextField(labelWithString: goalText)
         titleLabel.font = NSFont.boldSystemFont(ofSize: 14)
         titleLabel.lineBreakMode = .byTruncatingTail
-        titleLabel.frame = NSRect(x: 70, y: 15, width: 280, height: 20)
+        titleLabel.frame = NSRect(x: 70, y: 20, width: 280, height: 20)
         header.addSubview(titleLabel)
+
+        // Resume 链接（如果有的话）
+        if let originalId = resumedFrom {
+            let resumeLabel = NSTextField(labelWithString: L(.detail_resumed_from) + " \(String(originalId.prefix(8)))...")
+            resumeLabel.font = NSFont.systemFont(ofSize: 10)
+            resumeLabel.textColor = .secondaryLabelColor
+            resumeLabel.frame = NSRect(x: 70, y: 5, width: 280, height: 14)
+            header.addSubview(resumeLabel)
+        }
 
         // 底部分隔线
         let separator = NSBox(frame: NSRect(x: 0, y: 0, width: 360, height: 1))
@@ -187,7 +208,7 @@ class SessionDetailViewController: NSViewController {
     }
 
     /// 创建底部操作栏
-    /// 包含跳转终端和复制摘要按钮
+    /// 包含跳转终端和复制摘要按钮，以及用量统计
     private func createFooterView() -> NSView {
         let footer = NSView(frame: NSRect(x: 0, y: 0, width: 360, height: 50))
 
@@ -207,6 +228,18 @@ class SessionDetailViewController: NSViewController {
         copyButton.bezelStyle = .rounded
         copyButton.frame = NSRect(x: 100, y: 10, width: 80, height: 30)
         footer.addSubview(copyButton)
+
+        // 用量统计（显示在右侧）
+        if let usage = sessionUsage {
+            let usageText = "↓\(usage.formattedInputTokens) ↑\(usage.formattedOutputTokens)"
+            let usageLabel = NSTextField(labelWithString: usageText)
+            usageLabel.font = NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
+            usageLabel.textColor = .secondaryLabelColor
+            usageLabel.alignment = .right
+            usageLabel.frame = NSRect(x: 200, y: 18, width: 148, height: 14)
+            usageLabel.toolTip = "\(L(.usage_input_tokens)): \(usage.estimatedInputTokens)\n\(L(.usage_output_tokens)): \(usage.estimatedOutputTokens)\n\(L(.usage_total_estimated)): \(usage.totalEstimatedTokens)"
+            footer.addSubview(usageLabel)
+        }
 
         return footer
     }

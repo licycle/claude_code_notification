@@ -14,7 +14,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 from utils import read_hook_input, write_hook_output, log, get_project_name, get_env_info
 from services.database import (
     get_session, create_session, add_timeline_event, resolve_pending_decisions,
-    update_session_status, link_pending_session, update_session_shell_pid
+    update_session_status, link_pending_session, update_session_shell_pid,
+    add_prompt, get_prompt_count, cleanup_pending_session
 )
 
 
@@ -85,8 +86,17 @@ def main():
             initial_status='working'  # User submitted prompt, so working
         )
         log("GOAL", f"Session created with goal: {prompt[:100]}...")
+
+        # Record full prompt for display
+        add_prompt(session_id, prompt, round_number=1)
+        log("GOAL", f"Prompt recorded (round 1, {len(prompt)} chars)")
     else:
-        # Existing session - record as user input event
+        # Existing session - this is a resume or continuation
+        # Clean up any pending session since we're using an existing one
+        if pending_id:
+            cleaned = cleanup_pending_session(pending_id)
+            log("GOAL", f"Cleaned up {cleaned} pending session(s) for resume: {pending_id[:8]}...")
+
         current_status = session.get('current_status', 'idle')
         log("GOAL", f"Existing session (status: {current_status}), recording user input")
 
@@ -108,6 +118,11 @@ def main():
             event_type='user_input',
             content=prompt[:500]  # Truncate long prompts
         )
+
+        # Record full prompt for display
+        round_number = get_prompt_count(session_id) + 1
+        add_prompt(session_id, prompt, round_number=round_number)
+        log("GOAL", f"Prompt recorded (round {round_number}, {len(prompt)} chars)")
 
     write_hook_output()
 

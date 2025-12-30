@@ -100,18 +100,30 @@ def write_hook_output(
     sys.exit(0)
 
 
-def parse_transcript(transcript_path: str) -> List[Dict]:
-    """Parse transcript JSONL file"""
+def parse_transcript(transcript_path: str, start_line: int = 0) -> tuple:
+    """Parse transcript JSONL file
+
+    Args:
+        transcript_path: Path to the transcript file
+        start_line: Line number to start parsing from (0-based, for incremental parsing)
+
+    Returns:
+        Tuple of (events list, total line count)
+    """
     events = []
     path = Path(transcript_path)
+    line_count = 0
 
     if not path.exists():
         log("WARN", f"Transcript file not found: {transcript_path}")
-        return events
+        return events, 0
 
     try:
         with open(path, 'r', encoding='utf-8') as f:
-            for line in f:
+            for i, line in enumerate(f):
+                line_count = i + 1
+                if i < start_line:
+                    continue  # Skip already processed lines
                 line = line.strip()
                 if line:
                     try:
@@ -121,7 +133,7 @@ def parse_transcript(transcript_path: str) -> List[Dict]:
     except Exception as e:
         log("ERROR", f"Failed to parse transcript: {e}")
 
-    return events
+    return events, line_count
 
 
 def strip_xml_tags(text: str) -> str:

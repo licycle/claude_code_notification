@@ -98,6 +98,49 @@ CREATE TABLE IF NOT EXISTS goal_evolution (
 
 -- Index for progress lookup
 CREATE UNIQUE INDEX IF NOT EXISTS idx_progress_session ON progress(session_pk);
+
+-- prompts 表：存储完整提示词用于展示
+CREATE TABLE IF NOT EXISTS prompts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_pk INTEGER NOT NULL,
+    round_number INTEGER DEFAULT 1,
+    content TEXT NOT NULL,
+    char_count INTEGER DEFAULT 0,
+    word_count INTEGER DEFAULT 0,
+    estimated_tokens INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (session_pk) REFERENCES sessions(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_prompts_session ON prompts(session_pk);
+
+-- session_links 表：Resume 会话关联
+CREATE TABLE IF NOT EXISTS session_links (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    original_session_id TEXT NOT NULL,
+    resumed_session_id TEXT NOT NULL,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_session_links_original ON session_links(original_session_id);
+CREATE INDEX IF NOT EXISTS idx_session_links_resumed ON session_links(resumed_session_id);
+
+-- session_usage 表：会话用量统计
+CREATE TABLE IF NOT EXISTS session_usage (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_pk INTEGER UNIQUE NOT NULL,
+    total_input_chars INTEGER DEFAULT 0,
+    total_output_chars INTEGER DEFAULT 0,
+    total_input_words INTEGER DEFAULT 0,
+    total_output_words INTEGER DEFAULT 0,
+    estimated_input_tokens INTEGER DEFAULT 0,
+    estimated_output_tokens INTEGER DEFAULT 0,
+    last_processed_line INTEGER DEFAULT 0,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (session_pk) REFERENCES sessions(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_session_usage_session ON session_usage(session_pk);
 """
 
 
@@ -356,6 +399,266 @@ def get_pending_decisions(session_id: str) -> List[Dict]:
         return [dict(row) for row in cursor.fetchall()]
 
 
+# ============================================================================
+# Prompt Operations (for prompt history display)
+# ============================================================================
+
+def add_prompt(session_id: str, content: str, round_number: int = 1) -> int:
+    """Add a prompt record for a session
+
+    Args:
+        session_id: The session ID
+        content: Full prompt content
+        round_number: Which round of conversation (1-based)
+
+    Returns:
+        The ID of the inserted prompt record, or -1 if failed
+    """
+    char_count = len(content)
+    # For Chinese/mixed text, use character-based estimation
+    # English: ~4 chars per token, Chinese: ~1.5 chars per token
+    # Use a conservative estimate of 2 chars per token
+    word_count = len(content.split())
+    estimated_tokens = max(char_count // 2, word_count)
+
+    now = datetime.now().isoformat()
+    with get_connection() as conn:
+        # Get session_pk
+        cursor = conn.execute(
+            "SELECT id FROM sessions WHERE session_id = ?",
+            (session_id,)
+        )
+        row = cursor.fetchone()
+        if not row:
+            return -1
+        session_pk = row['id']
+
+        cursor = conn.execute(
+            """INSERT INTO prompts
+               (session_pk, round_number, content, char_count, word_count, estimated_tokens, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (session_pk, round_number, content, char_count, word_count, estimated_tokens, now)
+        )
+        return cursor.lastrowid
+
+
+def get_prompts(session_id: str) -> List[Dict]:
+    """Get all prompts for a session
+
+    Returns:
+        List of prompt records ordered by round_number
+    """
+    with get_connection() as conn:
+        cursor = conn.execute(
+            """SELECT p.* FROM prompts p
+               JOIN sessions s ON p.session_pk = s.id
+               WHERE s.session_id = ?
+               ORDER BY p.round_number ASC""",
+            (session_id,)
+        )
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def get_prompt_count(session_id: str) -> int:
+    """Get the number of prompts for a session"""
+    with get_connection() as conn:
+        cursor = conn.execute(
+            """SELECT COUNT(*) as cnt FROM prompts p
+               JOIN sessions s ON p.session_pk = s.id
+               WHERE s.session_id = ?""",
+            (session_id,)
+        )
+        row = cursor.fetchone()
+        return row['cnt'] if row else 0
+
+
+# ============================================================================
+# Session Link Operations (for resume tracking)
+# ============================================================================
+
+def add_session_link(original_session_id: str, resumed_session_id: str) -> int:
+    """Record a session resume link
+
+    Args:
+        original_session_id: The original session that was resumed from
+        resumed_session_id: The new session created by resume
+
+    Returns:
+        The ID of the inserted link record
+    """
+    now = datetime.now().isoformat()
+    with get_connection() as conn:
+        cursor = conn.execute(
+            """INSERT INTO session_links (original_session_id, resumed_session_id, created_at)
+               VALUES (?, ?, ?)""",
+            (original_session_id, resumed_session_id, now)
+        )
+        return cursor.lastrowid
+
+
+def get_resumed_from(session_id: str) -> Optional[str]:
+    """Get the original session ID that this session was resumed from
+
+    Returns:
+        The original session_id, or None if not a resumed session
+    """
+    with get_connection() as conn:
+        cursor = conn.execute(
+            """SELECT original_session_id FROM session_links
+               WHERE resumed_session_id = ?
+               ORDER BY created_at DESC LIMIT 1""",
+            (session_id,)
+        )
+        row = cursor.fetchone()
+        return row['original_session_id'] if row else None
+
+
+def get_resume_chain(session_id: str) -> List[str]:
+    """Get the full chain of resumed sessions
+
+    Returns:
+        List of session_ids from oldest to newest in the resume chain
+    """
+    chain = [session_id]
+    current = session_id
+
+    with get_connection() as conn:
+        # Walk backwards to find all ancestors
+        while True:
+            cursor = conn.execute(
+                """SELECT original_session_id FROM session_links
+                   WHERE resumed_session_id = ?""",
+                (current,)
+            )
+            row = cursor.fetchone()
+            if not row:
+                break
+            current = row['original_session_id']
+            chain.insert(0, current)
+
+    return chain
+
+
+# ============================================================================
+# Session Usage Operations (for token estimation)
+# ============================================================================
+
+def update_session_usage(
+    session_id: str,
+    input_chars: int = 0,
+    output_chars: int = 0,
+    input_words: int = 0,
+    output_words: int = 0,
+    actual_input_tokens: int = 0,
+    actual_output_tokens: int = 0,
+    last_processed_line: int = 0,
+    incremental: bool = False
+) -> None:
+    """Update or insert session usage statistics
+
+    Args:
+        incremental: If True, add to existing values. If False, replace.
+        last_processed_line: Line number in transcript that was last processed.
+
+    If actual_input_tokens/actual_output_tokens are provided (from API),
+    use them directly. Otherwise, estimate from chars/words.
+    """
+    # Use actual API token counts if available, otherwise estimate
+    if actual_input_tokens > 0 or actual_output_tokens > 0:
+        estimated_input = actual_input_tokens
+        estimated_output = actual_output_tokens
+    else:
+        # Fallback: ~2 chars per token for mixed Chinese/English
+        estimated_input = max(input_chars // 2, input_words)
+        estimated_output = max(output_chars // 2, output_words)
+
+    now = datetime.now().isoformat()
+
+    with get_connection() as conn:
+        # Get session_pk
+        cursor = conn.execute(
+            "SELECT id FROM sessions WHERE session_id = ?",
+            (session_id,)
+        )
+        row = cursor.fetchone()
+        if not row:
+            return
+        session_pk = row['id']
+
+        if incremental:
+            # Incremental mode: add to existing values
+            conn.execute(
+                """INSERT INTO session_usage
+                   (session_pk, total_input_chars, total_output_chars,
+                    total_input_words, total_output_words,
+                    estimated_input_tokens, estimated_output_tokens,
+                    last_processed_line, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(session_pk) DO UPDATE SET
+                    total_input_chars = total_input_chars + excluded.total_input_chars,
+                    total_output_chars = total_output_chars + excluded.total_output_chars,
+                    total_input_words = total_input_words + excluded.total_input_words,
+                    total_output_words = total_output_words + excluded.total_output_words,
+                    estimated_input_tokens = estimated_input_tokens + excluded.estimated_input_tokens,
+                    estimated_output_tokens = estimated_output_tokens + excluded.estimated_output_tokens,
+                    last_processed_line = excluded.last_processed_line,
+                    updated_at = excluded.updated_at""",
+                (session_pk, input_chars, output_chars, input_words, output_words,
+                 estimated_input, estimated_output, last_processed_line, now)
+            )
+        else:
+            # Replace mode: overwrite existing values
+            conn.execute(
+                """INSERT INTO session_usage
+                   (session_pk, total_input_chars, total_output_chars,
+                    total_input_words, total_output_words,
+                    estimated_input_tokens, estimated_output_tokens,
+                    last_processed_line, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(session_pk) DO UPDATE SET
+                    total_input_chars = excluded.total_input_chars,
+                    total_output_chars = excluded.total_output_chars,
+                    total_input_words = excluded.total_input_words,
+                    total_output_words = excluded.total_output_words,
+                    estimated_input_tokens = excluded.estimated_input_tokens,
+                    estimated_output_tokens = excluded.estimated_output_tokens,
+                    last_processed_line = excluded.last_processed_line,
+                    updated_at = excluded.updated_at""",
+                (session_pk, input_chars, output_chars, input_words, output_words,
+                 estimated_input, estimated_output, last_processed_line, now)
+            )
+
+
+def get_last_processed_line(session_id: str) -> int:
+    """Get the last processed line number for incremental parsing"""
+    with get_connection() as conn:
+        cursor = conn.execute(
+            """SELECT su.last_processed_line FROM session_usage su
+               JOIN sessions s ON su.session_pk = s.id
+               WHERE s.session_id = ?""",
+            (session_id,)
+        )
+        row = cursor.fetchone()
+        return row['last_processed_line'] if row else 0
+
+
+def get_session_usage(session_id: str) -> Optional[Dict]:
+    """Get usage statistics for a session
+
+    Returns:
+        Dict with usage stats, or None if not found
+    """
+    with get_connection() as conn:
+        cursor = conn.execute(
+            """SELECT su.* FROM session_usage su
+               JOIN sessions s ON su.session_pk = s.id
+               WHERE s.session_id = ?""",
+            (session_id,)
+        )
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
 # Initialize database on import
 init_database()
 
@@ -402,6 +705,18 @@ __all__ = [
     'add_pending_decision',
     'resolve_pending_decisions',
     'get_pending_decisions',
+    # Prompts
+    'add_prompt',
+    'get_prompts',
+    'get_prompt_count',
+    # Session Links (Resume)
+    'add_session_link',
+    'get_resumed_from',
+    'get_resume_chain',
+    # Session Usage
+    'update_session_usage',
+    'get_session_usage',
+    'get_last_processed_line',
     # From db_timeline
     'add_timeline_event',
     'get_session_timeline',

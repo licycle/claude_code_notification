@@ -358,6 +358,214 @@ class DatabaseManager {
         return result
     }
 
+    // MARK: - Prompt History
+
+    func getPrompts(sessionId: String) -> [PromptRecord] {
+        guard openDatabase() else { return [] }
+        defer { closeDatabase() }
+
+        let query: String
+        let bindValue: String
+
+        if sessionId.hasPrefix("pending_") {
+            let pendingId = String(sessionId.dropFirst(8))
+            query = """
+                SELECT p.id, p.session_pk, p.round_number, p.content,
+                       p.char_count, p.word_count, p.estimated_tokens, p.created_at
+                FROM prompts p
+                JOIN sessions s ON p.session_pk = s.id
+                WHERE s.pending_id = ?
+                ORDER BY p.round_number ASC
+                """
+            bindValue = pendingId
+        } else {
+            query = """
+                SELECT p.id, p.session_pk, p.round_number, p.content,
+                       p.char_count, p.word_count, p.estimated_tokens, p.created_at
+                FROM prompts p
+                JOIN sessions s ON p.session_pk = s.id
+                WHERE s.session_id = ?
+                ORDER BY p.round_number ASC
+                """
+            bindValue = sessionId
+        }
+
+        var prompts: [PromptRecord] = []
+        var statement: OpaquePointer?
+
+        if sqlite3_prepare_v2(db, query, -1, &statement, nil) == SQLITE_OK {
+            sqlite3_bind_text(statement, 1, bindValue, -1, SQLITE_TRANSIENT)
+
+            while sqlite3_step(statement) == SQLITE_ROW {
+                let id = Int(sqlite3_column_int(statement, 0))
+                let sessionPk = Int(sqlite3_column_int(statement, 1))
+                let roundNumber = Int(sqlite3_column_int(statement, 2))
+                let content = safeString(from: sqlite3_column_text(statement, 3))
+                let charCount = Int(sqlite3_column_int(statement, 4))
+                let wordCount = Int(sqlite3_column_int(statement, 5))
+                let estimatedTokens = Int(sqlite3_column_int(statement, 6))
+                let createdAtStr = safeString(from: sqlite3_column_text(statement, 7))
+                let createdAt = dateFormatter.date(from: String(createdAtStr.prefix(19))) ?? Date()
+
+                prompts.append(PromptRecord(
+                    id: id,
+                    sessionPk: sessionPk,
+                    roundNumber: roundNumber,
+                    content: content,
+                    charCount: charCount,
+                    wordCount: wordCount,
+                    estimatedTokens: estimatedTokens,
+                    createdAt: createdAt
+                ))
+            }
+        }
+        sqlite3_finalize(statement)
+
+        return prompts
+    }
+
+    // MARK: - Session Usage
+
+    func getSessionUsage(sessionId: String) -> SessionUsage? {
+        guard openDatabase() else { return nil }
+        defer { closeDatabase() }
+
+        let query: String
+        let bindValue: String
+
+        if sessionId.hasPrefix("pending_") {
+            let pendingId = String(sessionId.dropFirst(8))
+            query = """
+                SELECT su.session_pk, su.total_input_chars, su.total_output_chars,
+                       su.total_input_words, su.total_output_words,
+                       su.estimated_input_tokens, su.estimated_output_tokens, su.updated_at
+                FROM session_usage su
+                JOIN sessions s ON su.session_pk = s.id
+                WHERE s.pending_id = ?
+                """
+            bindValue = pendingId
+        } else {
+            query = """
+                SELECT su.session_pk, su.total_input_chars, su.total_output_chars,
+                       su.total_input_words, su.total_output_words,
+                       su.estimated_input_tokens, su.estimated_output_tokens, su.updated_at
+                FROM session_usage su
+                JOIN sessions s ON su.session_pk = s.id
+                WHERE s.session_id = ?
+                """
+            bindValue = sessionId
+        }
+
+        var statement: OpaquePointer?
+        var result: SessionUsage?
+
+        if sqlite3_prepare_v2(db, query, -1, &statement, nil) == SQLITE_OK {
+            sqlite3_bind_text(statement, 1, bindValue, -1, SQLITE_TRANSIENT)
+
+            if sqlite3_step(statement) == SQLITE_ROW {
+                let sessionPk = Int(sqlite3_column_int(statement, 0))
+                let totalInputChars = Int(sqlite3_column_int(statement, 1))
+                let totalOutputChars = Int(sqlite3_column_int(statement, 2))
+                let totalInputWords = Int(sqlite3_column_int(statement, 3))
+                let totalOutputWords = Int(sqlite3_column_int(statement, 4))
+                let estimatedInputTokens = Int(sqlite3_column_int(statement, 5))
+                let estimatedOutputTokens = Int(sqlite3_column_int(statement, 6))
+                let updatedAtStr = safeString(from: sqlite3_column_text(statement, 7))
+                let updatedAt = dateFormatter.date(from: String(updatedAtStr.prefix(19))) ?? Date()
+
+                result = SessionUsage(
+                    sessionPk: sessionPk,
+                    totalInputChars: totalInputChars,
+                    totalOutputChars: totalOutputChars,
+                    totalInputWords: totalInputWords,
+                    totalOutputWords: totalOutputWords,
+                    estimatedInputTokens: estimatedInputTokens,
+                    estimatedOutputTokens: estimatedOutputTokens,
+                    updatedAt: updatedAt
+                )
+            }
+        }
+        sqlite3_finalize(statement)
+
+        return result
+    }
+
+    // MARK: - Session Resume Links
+
+    func getResumedFrom(sessionId: String) -> String? {
+        guard openDatabase() else { return nil }
+        defer { closeDatabase() }
+
+        // Don't check pending sessions for resume links
+        if sessionId.hasPrefix("pending_") {
+            return nil
+        }
+
+        let query = """
+            SELECT original_session_id
+            FROM session_links
+            WHERE resumed_session_id = ?
+            ORDER BY created_at DESC
+            LIMIT 1
+            """
+
+        var statement: OpaquePointer?
+        var result: String?
+
+        if sqlite3_prepare_v2(db, query, -1, &statement, nil) == SQLITE_OK {
+            sqlite3_bind_text(statement, 1, sessionId, -1, SQLITE_TRANSIENT)
+
+            if sqlite3_step(statement) == SQLITE_ROW {
+                if let originalIdPtr = sqlite3_column_text(statement, 0) {
+                    result = String(cString: originalIdPtr)
+                }
+            }
+        }
+        sqlite3_finalize(statement)
+
+        return result
+    }
+
+    func getResumeChain(sessionId: String) -> [String] {
+        guard openDatabase() else { return [sessionId] }
+        defer { closeDatabase() }
+
+        var chain = [sessionId]
+        var current = sessionId
+
+        // Walk backwards to find all ancestors
+        while true {
+            let query = """
+                SELECT original_session_id
+                FROM session_links
+                WHERE resumed_session_id = ?
+                """
+
+            var statement: OpaquePointer?
+            var foundOriginal: String?
+
+            if sqlite3_prepare_v2(db, query, -1, &statement, nil) == SQLITE_OK {
+                sqlite3_bind_text(statement, 1, current, -1, SQLITE_TRANSIENT)
+
+                if sqlite3_step(statement) == SQLITE_ROW {
+                    if let originalIdPtr = sqlite3_column_text(statement, 0) {
+                        foundOriginal = String(cString: originalIdPtr)
+                    }
+                }
+            }
+            sqlite3_finalize(statement)
+
+            guard let original = foundOriginal else {
+                break
+            }
+
+            chain.insert(original, at: 0)
+            current = original
+        }
+
+        return chain
+    }
+
     // MARK: - Relative Time
 
     func relativeTime(from date: Date) -> String {

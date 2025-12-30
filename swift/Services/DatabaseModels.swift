@@ -55,6 +55,67 @@ struct SessionSummary {
     let timeline: [TimelineNode]
 }
 
+// MARK: - Prompt Record (for prompt history display)
+
+struct PromptRecord {
+    let id: Int
+    let sessionPk: Int
+    let roundNumber: Int
+    let content: String
+    let charCount: Int
+    let wordCount: Int
+    let estimatedTokens: Int
+    let createdAt: Date
+}
+
+// MARK: - Session Usage (for token estimation)
+
+struct SessionUsage {
+    let sessionPk: Int
+    let totalInputChars: Int
+    let totalOutputChars: Int
+    let totalInputWords: Int
+    let totalOutputWords: Int
+    let estimatedInputTokens: Int
+    let estimatedOutputTokens: Int
+    let updatedAt: Date
+
+    var totalEstimatedTokens: Int {
+        return estimatedInputTokens + estimatedOutputTokens
+    }
+
+    var formattedInputTokens: String {
+        return formatTokenCount(estimatedInputTokens)
+    }
+
+    var formattedOutputTokens: String {
+        return formatTokenCount(estimatedOutputTokens)
+    }
+
+    var formattedTotalTokens: String {
+        return formatTokenCount(totalEstimatedTokens)
+    }
+
+    private func formatTokenCount(_ count: Int) -> String {
+        if count >= 1_000_000 {
+            return String(format: "%.1fM", Double(count) / 1_000_000)
+        } else if count >= 1_000 {
+            return String(format: "%.1fK", Double(count) / 1_000)
+        } else {
+            return "\(count)"
+        }
+    }
+}
+
+// MARK: - Session Link (for resume tracking)
+
+struct SessionLink {
+    let id: Int
+    let originalSessionId: String
+    let resumedSessionId: String
+    let createdAt: Date
+}
+
 // MARK: - Status Type
 
 enum SessionStatusType {
