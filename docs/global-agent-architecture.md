@@ -253,7 +253,7 @@ python/task_tracker/
 ├── cli/
 │   ├── api_manager.py          # (现有)
 │   ├── account_manager.py      # (现有)
-│   └── todo_cli.py             # 新增: CLI 入口
+│   └── todo_cli.py             # CLI 入口
 ├── hooks/
 │   ├── goal_tracker.py         # 修改: 增加 Todo 感知
 │   ├── progress_tracker.py     # (现有)
@@ -261,23 +261,15 @@ python/task_tracker/
 │   └── snapshot_hook.py        # 修改: 增加 Todo 完成处理
 ├── services/
 │   ├── database.py             # 修改: 增加新表
-│   ├── todo_service.py         # 新增: Todo 服务
+│   ├── todo_service.py         # Todo 服务
+│   ├── project_decomposer.py   # 项目分解服务 (单次 Claude CLI 调用)
 │   ├── summary_service.py      # (现有) 复用 AI 功能
 │   └── notification.py         # (现有)
-├── workflow/                   # 新增: 工作流引擎
-│   ├── __init__.py
-│   ├── engine.py               # 工作流引擎核心
-│   ├── parser.py               # YAML 解析器
-│   ├── hooks.py                # Hook 管理器
-│   └── claude_agent.py         # Claude Agent 封装
-├── workflows/                  # 新增: 默认工作流定义
-│   ├── task-decomposition.yaml
-│   └── code-review.yaml
 └── mcp/
-    ├── __init__.py             # 新增
-    ├── server.py               # 新增: MCP Server 主入口
-    ├── tools.py                # 新增: MCP 工具实现
-    └── config.py               # 新增: 配置管理
+    ├── __init__.py
+    ├── server.py               # MCP Server 主入口
+    ├── tools.py                # MCP 工具实现
+    └── config.py               # 配置管理
 
 swift/
 ├── Services/
@@ -285,12 +277,10 @@ swift/
 │   ├── DatabaseManager.swift   # 修改: 新增查询方法
 │   └── TodoDatabaseManager.swift  # 新增: Todo 专用查询
 └── UI/
-    ├── Todo/
-    │   ├── TodoListView.swift      # 新增
-    │   ├── TodoDetailView.swift    # 新增
-    │   └── GlobalTaskView.swift    # 新增
-    └── Workflow/
-        └── WorkflowStatusView.swift # 新增: 工作流状态预览
+    └── Todo/
+        ├── TodoListView.swift      # 新增
+        ├── TodoDetailView.swift    # 新增
+        └── GlobalTaskView.swift    # 新增
 ```
 
 ---
@@ -571,138 +561,67 @@ Commands:
 - 输出：2-3 句话的完成总结
 - 说明完成内容、关键变更、注意事项
 
-### 9.3 全局任务分解工作流
+### 9.3 全局任务分解（简化方案）
 
-多阶段智能工作流：
-
-```
-┌──────────────┐    ┌──────────────┐    ┌──────────────────────┐
-│ 1. 任务输入   │───▶│ 2. 项目发现   │───▶│ 3. 代码结构分析      │
-│   (用户)      │    │   (自动)      │    │   (Claude Code)      │
-└──────────────┘    └──────────────┘    └──────────────────────┘
-                                                   │
-                                                   ▼
-┌──────────────┐    ┌──────────────┐    ┌──────────────────────┐
-│ 6. 存储执行   │◀───│ 5. 用户确认   │◀───│ 4. Todo 生成         │
-│   (系统)      │    │   (交互)      │    │   (AI 分解)          │
-└──────────────┘    └──────────────┘    └──────────────────────┘
-```
-
-#### 步骤说明
-
-| 步骤 | 说明 | 执行者 |
-|------|------|--------|
-| 任务输入 | 用户通过 CLI/UI 创建全局任务 | 用户 |
-| 项目发现 | 验证或自动发现目标项目 | 系统 |
-| 代码结构分析 | 利用 Claude Code 自主探索代码 | Claude Agent |
-| Todo 生成 | 基于分析结果生成 Todo 列表 | AI |
-| 用户确认 | 展示预览，允许编辑和调整 | 用户 |
-| 存储执行 | 批量创建 Todos 并记录 | 系统 |
-
-#### Claude Code 集成方式
-
-| 方式 | 说明 | 适用场景 |
-|------|------|----------|
-| CLI 调用 | `claude -p` 非交互模式 | CLI 工具 |
-| MCP 双向集成 | Claude Code 调用 MCP 工具 | Claude Code 内部 |
-| Skill 集成 | Claude Code Skill 封装 | 最佳用户体验 |
-
-### 9.4 可自定义 Hook 工作流引擎
-
-#### 9.4.1 设计目标
-
-1. **声明式工作流** - YAML 定义，易于理解和维护
-2. **可插拔 Hook** - 用户可在任意步骤前后插入自定义逻辑
-3. **Agent 自主探索** - 利用 Claude Code 的 Glob/Grep/Read 工具分析代码
-4. **子进程隔离** - 用户自定义 Hook 安全执行，不影响主流程
-
-#### 9.4.2 系统架构
+使用单次 Claude CLI 调用完成项目分析和 Todo 生成：
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                     用户输入                                     │
-│  - 全局任务定义                                                  │
-│  - 目标项目路径                                                  │
-│  - 自定义工作流 (可选)                                          │
-└──────────────────────────┬──────────────────────────────────────┘
-                           │
-                           v
-┌─────────────────────────────────────────────────────────────────┐
-│                  Workflow Engine (Python)                        │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐              │
-│  │   Parser    │  │  Executor   │  │   State     │              │
-│  │  (YAML)     │→ │  (Steps)    │→ │  Manager    │              │
-│  └─────────────┘  └─────────────┘  └─────────────┘              │
-└──────────────────────────┬──────────────────────────────────────┘
-                           │
-           ┌───────────────┼───────────────┐
-           v               v               v
-┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
-│  Claude Agent   │ │  Python Hook    │ │  Shell Hook     │
-│  (代码探索)     │ │  (子进程)       │ │  (子进程)       │
-└─────────────────┘ └─────────────────┘ └─────────────────┘
-           │               │               │
-           └───────────────┼───────────────┘
-                           v
-┌─────────────────────────────────────────────────────────────────┐
-│                    结果存储 (SQLite)                             │
-└─────────────────────────────────────────────────────────────────┘
+┌──────────────┐    ┌──────────────────────────────────┐    ┌──────────────┐
+│ 1. 任务输入   │───▶│ 2. Claude CLI 分析 + Todo 生成   │───▶│ 3. 存储执行   │
+│   (用户)      │    │   (单次 claude -p 调用)          │    │   (系统)      │
+└──────────────┘    └──────────────────────────────────┘    └──────────────┘
 ```
 
-#### 9.4.3 工作流定义结构
+#### 实现方式
 
-YAML 工作流定义包含：
+使用 `ProjectDecomposer` 服务（`services/project_decomposer.py`）：
 
-| 部分 | 说明 |
-|------|------|
-| `name` | 工作流名称 |
-| `version` | 版本号 |
-| `description` | 描述 |
-| `inputs` | 输入参数定义 |
-| `steps` | 步骤列表 |
-| `hooks` | 自定义 Hook 定义 |
-| `error_handling` | 错误处理策略 |
+```python
+decomposer = ProjectDecomposer(
+    project_paths=["/path/to/project"],
+    api_profile="kimi"  # 可选 API profile
+)
+result = decomposer.decompose("任务标题", "任务描述")
+```
 
-#### 9.4.4 步骤类型
+#### Claude CLI 调用
 
-| 类型 | 说明 |
-|------|------|
-| `claude_agent` | 调用 Claude Code Agent 执行任务 |
-| `interactive` | 需要用户交互的步骤 |
-| `action` | 执行预定义的系统操作 |
-| `python` | 执行 Python 脚本 |
-| `shell` | 执行 Shell 命令 |
+```bash
+claude -p "prompt" \
+  --allowedTools "Read,Grep,Glob" \
+  --max-turns 15
+```
 
-#### 9.4.5 Hook 类型
+#### 输出格式
 
-| 类型 | 执行方式 | 说明 |
-|------|----------|------|
-| `python` | 子进程 | Python 脚本，通过 HOOK_CONTEXT 环境变量获取上下文 |
-| `shell` | 子进程 | Shell 命令，支持环境变量模板 |
-| `claude_agent` | Claude CLI | 调用 Claude Agent 执行验证等任务 |
+```json
+{
+  "analysis": {
+    "project_type": "python",
+    "tech_stack": ["FastAPI", "SQLite"],
+    "relevant_files": ["src/main.py"]
+  },
+  "todos": [
+    {
+      "project_path": "/path/to/project",
+      "title": "Implement JWT authentication",
+      "description": "Add JWT middleware...",
+      "priority": 0,
+      "estimated_minutes": 60
+    }
+  ],
+  "total_estimated_minutes": 480
+}
+```
 
-#### 9.4.6 工作流继承
+#### CLI 命令
 
-用户自定义工作流可以：
-- `extends`: 继承默认工作流
-- `override`: 覆盖指定步骤
-- `insert_after`: 在指定步骤后插入新步骤
-
-#### 9.4.7 Claude Agent 能力
-
-利用 Claude Code CLI 的非交互模式：
-
-| 命令选项 | 说明 |
-|----------|------|
-| `-p` | 非交互模式，直接返回结果 |
-| `--output-format stream-json` | JSON 输出格式 |
-| `--dangerously-skip-permissions` | 跳过权限确认（仅用于容器） |
-
-Agent 可使用的内置工具：
-- **Glob**: 文件模式匹配
-- **Grep**: 代码内容搜索
-- **Read**: 文件读取
-- **Bash**: 命令执行
+```bash
+claude-todo task decompose <task_id> \
+  --projects /path/to/project \
+  --api-profile kimi \
+  --interactive  # 可选：启用交互模式
+```
 
 ---
 

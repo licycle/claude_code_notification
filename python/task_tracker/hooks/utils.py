@@ -215,6 +215,10 @@ def extract_all_user_messages(events: List[Dict]) -> List[str]:
     messages = []
 
     for event in events:
+        # Skip if event is not a dict (could be a list or other type)
+        if not isinstance(event, dict):
+            continue
+
         event_type = event.get('type', '')
 
         # Source 1: Direct user input

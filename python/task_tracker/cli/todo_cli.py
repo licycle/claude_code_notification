@@ -95,15 +95,99 @@ def print_json(data):
 # ============================================================================
 
 def cmd_task_create(args):
-    """Create a new global task"""
+    """Create a new global task and optionally decompose it"""
+    from task_tracker.services.project_decomposer import (
+        ProjectDecomposer,
+        list_api_profiles,
+        DecomposeError,
+    )
+
+    # Create the task first
     task = create_global_task(
         title=args.title,
         description=args.desc,
         priority=args.priority
     )
     print(f"Created task #{task.id}: {task.title}")
-    if args.json:
-        print_json(task.to_dict())
+
+    # Check if decomposition is requested (default: True unless --no-decompose)
+    should_decompose = not getattr(args, 'no_decompose', False)
+
+    if not should_decompose:
+        if args.json:
+            print_json(task.to_dict())
+        return
+
+    # Decompose the task
+    project_paths = args.projects if args.projects else [os.getcwd()]
+
+    # Handle API profile
+    api_profile = getattr(args, 'api_profile', None)
+    if api_profile:
+        available = list_api_profiles()
+        if api_profile not in available:
+            print(f"Warning: API profile '{api_profile}' not found, using default")
+            api_profile = None
+
+    print(f"\nDecomposing task...")
+    print(f"Projects: {', '.join(project_paths)}")
+    if api_profile:
+        print(f"Using API profile: {api_profile}")
+
+    try:
+        decomposer = ProjectDecomposer(
+            project_paths=project_paths,
+            api_profile=api_profile,
+            timeout=600,
+            max_turns=15
+        )
+
+        result = decomposer.decompose(
+            task_title=task.title,
+            task_description=args.desc or ''
+        )
+
+        # Show preview
+        print(f"\nGenerated {len(result.todos)} todos:")
+        for i, todo in enumerate(result.todos):
+            est = f"{todo.get('estimated_minutes', 60)}m"
+            print(f"  {i+1}. [{est}] {todo['title']}")
+
+        print(f"\nTotal estimated time: {result.total_estimated_hours} hours")
+
+        # Interactive mode
+        if getattr(args, 'interactive', False):
+            confirm = input("\nSave these todos? [Y/n]: ").strip().lower()
+            if confirm and confirm != 'y':
+                print("Todos not saved. Task created without decomposition.")
+                return
+
+        # Save todos
+        saved_ids = []
+        for todo_def in result.todos:
+            todo = create_todo(
+                project_path=todo_def.get('project_path', project_paths[0]),
+                title=todo_def['title'],
+                description=todo_def.get('description'),
+                global_task_id=task.id,
+                priority=todo_def.get('priority', 0),
+                estimated_minutes=todo_def.get('estimated_minutes'),
+                actor='ai'
+            )
+            saved_ids.append(todo.id)
+
+        print(f"\nCreated {len(saved_ids)} todos: {saved_ids}")
+
+        if args.json:
+            print_json({
+                'task': task.to_dict(),
+                'todos': [{'id': tid, **td} for tid, td in zip(saved_ids, result.todos)],
+                'total_estimated_hours': result.total_estimated_hours
+            })
+
+    except DecomposeError as e:
+        print(f"\nDecomposition failed: {e}")
+        print("Task created but not decomposed. Use 'task decompose' to retry.")
 
 
 def cmd_task_list(args):
@@ -419,73 +503,28 @@ def cmd_workflow_runs(args):
 
 
 def cmd_workflow_run(args):
-    """Run a workflow"""
-    from task_tracker.workflow.engine import WorkflowEngine
-
-    # Parse input parameters
-    inputs = {}
-    if args.inputs:
-        for inp in args.inputs:
-            if '=' in inp:
-                key, value = inp.split('=', 1)
-                # Try to parse as JSON for complex values
-                try:
-                    inputs[key] = json.loads(value)
-                except json.JSONDecodeError:
-                    inputs[key] = value
-
-    # Add project paths if specified
-    if args.projects:
-        inputs['project_paths'] = args.projects
-
-    # Add task info if specified
-    if args.task_id:
-        inputs['task_id'] = args.task_id
-        task = get_global_task(args.task_id)
-        if task:
-            inputs['task_title'] = task.title
-            inputs['task_description'] = task.description or ''
-
-    try:
-        print(f"Loading workflow: {args.name}")
-        engine = WorkflowEngine(workflow_name=args.name)
-
-        print(f"Executing workflow with inputs: {list(inputs.keys())}")
-        result = engine.execute(inputs)
-
-        print(f"\nWorkflow completed with status: {format_status(result.status)}")
-        print(f"Run ID: {result.run_id}")
-
-        if args.json:
-            print_json({
-                'run_id': result.run_id,
-                'status': result.status,
-                'results': {k: {'status': v.status.value, 'output': v.output}
-                           for k, v in result.results.items()}
-            })
-        else:
-            print(f"\nStep Results:")
-            for step_id, step_result in result.results.items():
-                status_str = format_status(step_result.status.value)
-                print(f"  {status_str} {step_id}")
-                if step_result.error:
-                    print(f"      Error: {step_result.error}")
-
-        if result.status == 'failed':
-            sys.exit(1)
-
-    except FileNotFoundError as e:
-        print(f"Error: {e}")
-        sys.exit(1)
-    except Exception as e:
-        print(f"Workflow execution failed: {e}")
-        sys.exit(1)
+    """Run a workflow (deprecated)"""
+    print("Error: Workflow engine has been removed.")
+    print("")
+    print("For task decomposition, use:")
+    print("  claude-todo task decompose <task_id> --projects /path/to/project")
+    print("")
+    print("This uses a simplified single Claude CLI call instead of the complex workflow engine.")
+    sys.exit(1)
 
 
 def cmd_task_decompose(args):
-    """Decompose a global task into project todos using AI workflow"""
-    from task_tracker.workflow.engine import WorkflowEngine
-    from task_tracker.workflow.claude_agent import list_api_profiles
+    """Decompose a global task into project todos using Claude CLI"""
+    from task_tracker.services.project_decomposer import (
+        ProjectDecomposer,
+        list_api_profiles,
+        DecomposeError,
+        ProjectNotFoundError,
+        ClaudeNotFoundError,
+        ClaudeTimeoutError,
+        OutputParseError,
+        ValidationError,
+    )
 
     # Get task info
     task = get_global_task(args.task_id)
@@ -508,48 +547,93 @@ def cmd_task_decompose(args):
 
     print(f"Decomposing task #{task.id}: {task.title}")
     print(f"Projects: {', '.join(project_paths)}")
-
-    # Prepare inputs
-    inputs = {
-        'task_id': task.id,
-        'task_title': task.title,
-        'task_description': task.description or '',
-        'project_paths': project_paths,
-        'api_profile': api_profile,  # 传递 api_profile
-    }
-
-    # Use specified workflow or default
-    workflow_name = args.workflow or 'task-decomposition'
+    print("Analyzing codebase with Claude CLI...")
 
     try:
-        engine = WorkflowEngine(workflow_name=workflow_name)
-        print(f"\nRunning workflow: {workflow_name}")
+        # Create decomposer and execute
+        decomposer = ProjectDecomposer(
+            project_paths=project_paths,
+            api_profile=api_profile,
+            timeout=600,
+            max_turns=15
+        )
 
-        result = engine.execute(inputs)
+        result = decomposer.decompose(
+            task_title=task.title,
+            task_description=task.description or ''
+        )
 
-        print(f"\nDecomposition completed with status: {format_status(result.status)}")
+        # Show preview
+        print(f"\nGenerated {len(result.todos)} todos:")
+        for i, todo in enumerate(result.todos):
+            est = f"{todo.get('estimated_minutes', 60)}m"
+            print(f"  {i+1}. [{est}] {todo['title']}")
 
-        if result.status == 'completed':
-            # Show created todos
-            save_result = result.results.get('save_todos')
-            if save_result and save_result.output:
-                saved_count = save_result.output.get('saved', 0)
-                todo_ids = save_result.output.get('todo_ids', [])
-                print(f"Created {saved_count} todos: {todo_ids}")
+        print(f"\nTotal estimated time: {result.total_estimated_hours} hours")
+
+        # Show analysis if verbose
+        if result.analysis:
+            print(f"\nProject Analysis:")
+            print(f"  Type: {result.analysis.get('project_type', 'N/A')}")
+            print(f"  Tech Stack: {', '.join(result.analysis.get('tech_stack', []))}")
+
+        # Interactive mode: allow user to review/edit
+        if getattr(args, 'interactive', False):
+            print("\n--- Interactive Mode ---")
+            print("Todos preview (edit not implemented yet)")
+            confirm = input("\nSave these todos? [Y/n]: ").strip().lower()
+            if confirm and confirm != 'y':
+                print("Cancelled")
+                return
         else:
-            print("Decomposition failed. Check workflow logs for details.")
-            if args.json:
-                print_json({
-                    'status': result.status,
-                    'errors': {k: v.error for k, v in result.results.items() if v.error}
-                })
-            sys.exit(1)
+            # Default: just show and save
+            pass
 
-    except FileNotFoundError:
-        print(f"Workflow '{workflow_name}' not found")
+        # Save to database
+        saved_ids = []
+        for todo_def in result.todos:
+            todo = create_todo(
+                project_path=todo_def.get('project_path', project_paths[0]),
+                title=todo_def['title'],
+                description=todo_def.get('description'),
+                global_task_id=task.id,
+                priority=todo_def.get('priority', 0),
+                estimated_minutes=todo_def.get('estimated_minutes'),
+                actor='ai'
+            )
+            saved_ids.append(todo.id)
+
+        print(f"\nCreated {len(saved_ids)} todos: {saved_ids}")
+
+        if args.json:
+            print_json({
+                'task_id': task.id,
+                'analysis': result.analysis,
+                'todos': [{'id': tid, **td} for tid, td in zip(saved_ids, result.todos)],
+                'total_estimated_hours': result.total_estimated_hours
+            })
+
+    except ProjectNotFoundError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+    except ClaudeNotFoundError as e:
+        print(f"Error: {e}")
+        print("Install Claude Code CLI: npm install -g @anthropic/claude-code")
+        sys.exit(1)
+    except ClaudeTimeoutError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+    except OutputParseError as e:
+        print(f"Error parsing Claude output: {e}")
+        sys.exit(1)
+    except ValidationError as e:
+        print(f"Validation error: {e}")
+        sys.exit(1)
+    except DecomposeError as e:
+        print(f"Decomposition failed: {e}")
         sys.exit(1)
     except Exception as e:
-        print(f"Decomposition failed: {e}")
+        print(f"Unexpected error: {e}")
         sys.exit(1)
 
 
@@ -610,7 +694,7 @@ def cmd_server_restart(args):
 
 def cmd_api_list(args):
     """List available API profiles from claude-api"""
-    from task_tracker.workflow.claude_agent import list_api_profiles, load_api_profile
+    from task_tracker.services.project_decomposer import list_api_profiles, load_api_profile
 
     profiles = list_api_profiles()
     if not profiles:
@@ -645,11 +729,17 @@ def main():
     task_sub = task_parser.add_subparsers(dest='subcommand')
 
     # task create
-    create_p = task_sub.add_parser('create', help='Create a new global task')
+    create_p = task_sub.add_parser('create', help='Create a new global task (with auto-decomposition)')
     create_p.add_argument('title', help='Task title')
     create_p.add_argument('--desc', '-d', help='Task description')
     create_p.add_argument('--priority', '-p', type=int, choices=[0, 1, 2], default=0,
                          help='Priority: 0=normal, 1=high, 2=urgent')
+    create_p.add_argument('--projects', nargs='+', help='Project paths to analyze (default: current directory)')
+    create_p.add_argument('--api-profile', dest='api_profile', help='API profile name (e.g., kimi)')
+    create_p.add_argument('--no-decompose', action='store_true',
+                         help='Skip auto-decomposition, only create the task')
+    create_p.add_argument('--interactive', '-i', action='store_true',
+                         help='Interactive mode: confirm before saving todos')
     create_p.add_argument('--json', action='store_true')
     create_p.set_defaults(func=cmd_task_create)
 
@@ -686,7 +776,8 @@ def main():
     decompose_p.add_argument('task_id', type=int, help='Task ID to decompose')
     decompose_p.add_argument('--projects', nargs='+', help='Project paths to analyze')
     decompose_p.add_argument('--api-profile', dest='api_profile', help='API profile name from claude-api (e.g., kimi)')
-    decompose_p.add_argument('--workflow', help='Workflow name (default: task-decomposition)')
+    decompose_p.add_argument('--interactive', '-i', action='store_true',
+                            help='Interactive mode: preview and confirm before saving')
     decompose_p.add_argument('--json', action='store_true')
     decompose_p.set_defaults(func=cmd_task_decompose)
 
