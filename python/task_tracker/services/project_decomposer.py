@@ -226,9 +226,18 @@ class ProjectDecomposer:
         paths = [
             shutil.which('claude'),
             '/usr/local/bin/claude',
+            '/opt/homebrew/bin/claude',
             str(Path.home() / '.local' / 'bin' / 'claude'),
-            str(Path.home() / '.nvm' / 'versions' / 'node' / 'v24.11.0' / 'bin' / 'claude'),
         ]
+
+        # Scan nvm node versions dynamically
+        nvm_node_dir = Path.home() / '.nvm' / 'versions' / 'node'
+        if nvm_node_dir.exists():
+            for version_dir in sorted(nvm_node_dir.iterdir(), reverse=True):
+                claude_path = version_dir / 'bin' / 'claude'
+                if claude_path.exists():
+                    paths.append(str(claude_path))
+
         for path in paths:
             if path and Path(path).exists():
                 return path
@@ -355,6 +364,16 @@ class ProjectDecomposer:
 
         # Prepare environment with API profile
         env = os.environ.copy()
+
+        # Ensure node is in PATH (scan nvm versions dynamically)
+        nvm_node_dir = Path.home() / '.nvm' / 'versions' / 'node'
+        if nvm_node_dir.exists():
+            node_paths = sorted(nvm_node_dir.iterdir(), reverse=True)  # newest first
+            extra_paths = [str(p / 'bin') for p in node_paths if p.is_dir()]
+            extra_paths.extend(['/opt/homebrew/bin', '/usr/local/bin'])
+            current_path = env.get('PATH', '/usr/bin:/bin')
+            env['PATH'] = ':'.join(extra_paths) + ':' + current_path
+
         if self._api_base_url:
             env['ANTHROPIC_BASE_URL'] = self._api_base_url
         if self._api_key:

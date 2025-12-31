@@ -26,6 +26,10 @@ class BackgroundTaskRunner {
         apiProfile: String? = nil,
         completion: @escaping (Bool, String?) -> Void
     ) {
+        log("BackgroundTaskRunner: runDecompose called for task \(taskId)")
+        log("BackgroundTaskRunner: projects = \(projects)")
+        log("BackgroundTaskRunner: apiProfile = \(apiProfile ?? "nil")")
+
         queue.async { [weak self] in
             guard let self = self else { return }
 
@@ -39,7 +43,7 @@ class BackgroundTaskRunner {
 
             if !projects.isEmpty {
                 args.append("--projects")
-                args.append(projects.joined(separator: ","))
+                args.append(contentsOf: projects)  // Each project as separate argument
             }
 
             if let profile = apiProfile {
@@ -48,6 +52,7 @@ class BackgroundTaskRunner {
             }
 
             process.arguments = args
+            log("BackgroundTaskRunner: Full command = \(args.joined(separator: " "))")
 
             // Set working directory to hooks location
             let hooksDir = FileManager.default.homeDirectoryForCurrentUser
@@ -87,8 +92,12 @@ class BackgroundTaskRunner {
                 // Notify on main thread
                 DispatchQueue.main.async {
                     if exitCode == 0 {
+                        log("BackgroundTaskRunner: Task \(taskId) completed successfully")
                         completion(true, output)
                     } else {
+                        log("BackgroundTaskRunner: Task \(taskId) failed with exit code \(exitCode)")
+                        log("BackgroundTaskRunner: stderr = \(errorOutput)")
+                        log("BackgroundTaskRunner: stdout = \(output)")
                         let message = errorOutput.isEmpty ? "Exit code: \(exitCode)" : errorOutput
                         completion(false, message)
                     }

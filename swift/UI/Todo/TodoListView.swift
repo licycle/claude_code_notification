@@ -35,6 +35,9 @@ class TodoListView: NSView {
         tv.headerView = nil
         tv.delegate = self
         tv.dataSource = self
+        tv.menu = createContextMenu()
+        tv.doubleAction = #selector(tableDoubleClicked)
+        tv.target = self
         return tv
     }()
 
@@ -139,11 +142,16 @@ class TodoListView: NSView {
         guard let window = self.window else { return }
 
         let sheet = CreateTaskSheet()
-        sheet.onTaskCreated = { [weak self] taskId, shouldDecompose in
-            if shouldDecompose {
-                // Run decomposition in background
-                let projects = DatabaseManager.shared.getUniqueProjects(limit: 5)
-                BackgroundTaskRunner.shared.runDecompose(taskId: taskId, projects: projects) { success, message in
+        sheet.onTaskCreated = { [weak self] taskId, shouldDecompose, apiProfile, projects in
+            log("TodoListView: onTaskCreated callback - taskId=\(taskId), shouldDecompose=\(shouldDecompose), projects=\(projects)")
+            if shouldDecompose && !projects.isEmpty {
+                log("TodoListView: Starting decomposition...")
+                // Run decomposition in background with user-provided projects
+                BackgroundTaskRunner.shared.runDecompose(
+                    taskId: taskId,
+                    projects: projects,
+                    apiProfile: apiProfile
+                ) { success, message in
                     if success {
                         log("Task \(taskId) decomposed successfully")
                     } else {
@@ -216,6 +224,98 @@ class TodoListView: NSView {
         let completed = todos.filter { $0.isCompleted }.count
 
         statsLabel.stringValue = "\(pending) pending · \(inProgress) active · \(completed) done"
+    }
+
+    // MARK: - Context Menu
+
+    private func createContextMenu() -> NSMenu {
+        let menu = NSMenu()
+
+        let editItem = NSMenuItem(title: L(.todo_edit), action: #selector(editTodoClicked), keyEquivalent: "")
+        editItem.target = self
+        menu.addItem(editItem)
+
+        menu.addItem(NSMenuItem.separator())
+
+        let completeItem = NSMenuItem(title: L(.todo_mark_complete), action: #selector(markCompleteClicked), keyEquivalent: "")
+        completeItem.target = self
+        menu.addItem(completeItem)
+
+        let pendingItem = NSMenuItem(title: L(.todo_mark_pending), action: #selector(markPendingClicked), keyEquivalent: "")
+        pendingItem.target = self
+        menu.addItem(pendingItem)
+
+        menu.addItem(NSMenuItem.separator())
+
+        let deleteItem = NSMenuItem(title: L(.todo_delete), action: #selector(deleteTodoClicked), keyEquivalent: "")
+        deleteItem.target = self
+        menu.addItem(deleteItem)
+
+        return menu
+    }
+
+    @objc private func tableDoubleClicked() {
+        let row = tableView.clickedRow
+        guard row >= 0 && row < todos.count else { return }
+        showEditSheet(for: todos[row])
+    }
+
+    @objc private func editTodoClicked() {
+        let row = tableView.clickedRow
+        guard row >= 0 && row < todos.count else { return }
+        showEditSheet(for: todos[row])
+    }
+
+    @objc private func markCompleteClicked() {
+        let row = tableView.clickedRow
+        guard row >= 0 && row < todos.count else { return }
+        let todo = todos[row]
+        if todoDbManager.updateTodo(id: todo.id, status: "completed") {
+            loadData()
+        }
+    }
+
+    @objc private func markPendingClicked() {
+        let row = tableView.clickedRow
+        guard row >= 0 && row < todos.count else { return }
+        let todo = todos[row]
+        if todoDbManager.updateTodo(id: todo.id, status: "pending") {
+            loadData()
+        }
+    }
+
+    @objc private func deleteTodoClicked() {
+        let row = tableView.clickedRow
+        guard row >= 0 && row < todos.count else { return }
+        let todo = todos[row]
+
+        // Show confirmation alert
+        let alert = NSAlert()
+        alert.messageText = L(.todo_delete_confirm_title)
+        alert.informativeText = L(.todo_delete_confirm_message)
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: L(.todo_delete))
+        alert.addButton(withTitle: L(.cancel))
+
+        if alert.runModal() == .alertFirstButtonReturn {
+            if todoDbManager.deleteTodo(id: todo.id) {
+                loadData()
+            }
+        }
+    }
+
+    private func showEditSheet(for todo: ProjectTodoItem) {
+        guard let window = self.window else { return }
+
+        let sheet = TodoDetailSheet(todo: todo)
+        sheet.onSave = { [weak self] in
+            self?.loadData()
+        }
+        sheet.onDelete = { [weak self] in
+            self?.loadData()
+        }
+
+        window.contentViewController?.presentAsSheet(sheet)
     }
 
     // MARK: - Actions

@@ -5,12 +5,14 @@ import AppKit
 enum NavigationItem: Int, CaseIterable {
     case taskCenter = 0
     case reports = 1
-    case settings = 2
+    case mcp = 2
+    case settings = 3
 
     var title: String {
         switch self {
         case .taskCenter: return "Task Center"
         case .reports: return "Reports"
+        case .mcp: return "MCP Server"
         case .settings: return "Settings"
         }
     }
@@ -19,6 +21,7 @@ enum NavigationItem: Int, CaseIterable {
         switch self {
         case .taskCenter: return L(.nav_task_center)
         case .reports: return L(.nav_reports)
+        case .mcp: return L(.nav_mcp)
         case .settings: return L(.nav_settings)
         }
     }
@@ -27,6 +30,7 @@ enum NavigationItem: Int, CaseIterable {
         switch self {
         case .taskCenter: return "list.bullet.rectangle"
         case .reports: return "chart.bar"
+        case .mcp: return "server.rack"
         case .settings: return "gearshape"
         }
     }
@@ -43,6 +47,7 @@ class ManagementMainViewController: NSViewController {
     private var taskCenterViewController: TaskCenterViewController?
     private var taskCenterDetailViewController: TaskCenterDetailViewController?
     private var reportsViewController: ReportsViewController?
+    private var mcpViewController: MCPViewController?
 
     override func loadView() {
         view = NSView(frame: NSRect(x: 0, y: 0, width: 1050, height: 650))
@@ -121,6 +126,12 @@ class ManagementMainViewController: NSViewController {
             }
             newViewController = reportsViewController!
 
+        case .mcp:
+            if mcpViewController == nil {
+                mcpViewController = MCPViewController()
+            }
+            newViewController = mcpViewController!
+
         case .settings:
             // Open settings window instead
             NotificationCenter.default.post(name: .showSettingsWindow, object: nil)
@@ -145,6 +156,7 @@ class ManagementMainViewController: NSViewController {
     func refresh() {
         taskCenterViewController?.refresh()
         reportsViewController?.refresh()
+        mcpViewController?.refresh()
     }
 }
 

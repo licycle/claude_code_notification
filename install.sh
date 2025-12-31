@@ -131,7 +131,7 @@ install_cli_scripts "$CLI_SRC" "$BASE_DIR"
 # ================= 3.5 Task Tracker Installation =================
 cecho "\n${BLUE}--- Installing Task Tracker ---${NC}"
 
-# Install Python dependencies (pyyaml, jinja2)
+# Check Python is available
 install_python_deps
 
 TRACKER_SRC="$SCRIPT_DIR/python/task_tracker"

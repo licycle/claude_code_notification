@@ -529,6 +529,195 @@ class TodoDatabaseManager {
         return 0
     }
 
+    // MARK: - Update Operations
+
+    /// Update a todo
+    /// - Returns: true if successful
+    func updateTodo(
+        id: Int,
+        title: String? = nil,
+        description: String? = nil,
+        status: String? = nil,
+        priority: Int? = nil,
+        estimatedMinutes: Int? = nil
+    ) -> Bool {
+        guard dbManager.openDatabase() else { return false }
+        defer { dbManager.closeDatabase() }
+
+        var setClauses: [String] = []
+        var params: [Any] = []
+
+        if let title = title {
+            setClauses.append("title = ?")
+            params.append(title)
+        }
+        if let description = description {
+            setClauses.append("description = ?")
+            params.append(description)
+        }
+        if let status = status {
+            setClauses.append("status = ?")
+            params.append(status)
+            if status == "completed" {
+                setClauses.append("completed_at = ?")
+                params.append(ISO8601DateFormatter().string(from: Date()))
+            }
+        }
+        if let priority = priority {
+            setClauses.append("priority = ?")
+            params.append(priority)
+        }
+        if let estimatedMinutes = estimatedMinutes {
+            setClauses.append("estimated_minutes = ?")
+            params.append(estimatedMinutes)
+        }
+
+        guard !setClauses.isEmpty else { return false }
+
+        setClauses.append("updated_at = ?")
+        params.append(ISO8601DateFormatter().string(from: Date()))
+        params.append(id)
+
+        let query = "UPDATE todos SET \(setClauses.joined(separator: ", ")) WHERE id = ?"
+
+        var statement: OpaquePointer?
+        if sqlite3_prepare_v2(dbManager.db, query, -1, &statement, nil) == SQLITE_OK {
+            for (i, param) in params.enumerated() {
+                if let str = param as? String {
+                    sqlite3_bind_text(statement, Int32(i + 1), str, -1, SQLITE_TRANSIENT_TODO)
+                } else if let int = param as? Int {
+                    sqlite3_bind_int(statement, Int32(i + 1), Int32(int))
+                }
+            }
+
+            let result = sqlite3_step(statement) == SQLITE_DONE
+            sqlite3_finalize(statement)
+            return result
+        }
+        sqlite3_finalize(statement)
+        return false
+    }
+
+    /// Delete a todo (children become independent)
+    /// - Returns: true if successful
+    func deleteTodo(id: Int) -> Bool {
+        guard dbManager.openDatabase() else { return false }
+        defer { dbManager.closeDatabase() }
+
+        // First, set children's parent_todo_id to NULL
+        var statement: OpaquePointer?
+        let orphanQuery = "UPDATE todos SET parent_todo_id = NULL, updated_at = ? WHERE parent_todo_id = ?"
+        if sqlite3_prepare_v2(dbManager.db, orphanQuery, -1, &statement, nil) == SQLITE_OK {
+            let now = ISO8601DateFormatter().string(from: Date())
+            sqlite3_bind_text(statement, 1, now, -1, SQLITE_TRANSIENT_TODO)
+            sqlite3_bind_int(statement, 2, Int32(id))
+            sqlite3_step(statement)
+        }
+        sqlite3_finalize(statement)
+
+        // Then delete the todo
+        let deleteQuery = "DELETE FROM todos WHERE id = ?"
+        if sqlite3_prepare_v2(dbManager.db, deleteQuery, -1, &statement, nil) == SQLITE_OK {
+            sqlite3_bind_int(statement, 1, Int32(id))
+            let result = sqlite3_step(statement) == SQLITE_DONE
+            sqlite3_finalize(statement)
+            return result
+        }
+        sqlite3_finalize(statement)
+        return false
+    }
+
+    /// Update a global task
+    /// - Returns: true if successful
+    func updateGlobalTask(
+        id: Int,
+        title: String? = nil,
+        description: String? = nil,
+        status: String? = nil,
+        priority: Int? = nil
+    ) -> Bool {
+        guard dbManager.openDatabase() else { return false }
+        defer { dbManager.closeDatabase() }
+
+        var setClauses: [String] = []
+        var params: [Any] = []
+
+        if let title = title {
+            setClauses.append("title = ?")
+            params.append(title)
+        }
+        if let description = description {
+            setClauses.append("description = ?")
+            params.append(description)
+        }
+        if let status = status {
+            setClauses.append("status = ?")
+            params.append(status)
+            if status == "completed" {
+                setClauses.append("completed_at = ?")
+                params.append(ISO8601DateFormatter().string(from: Date()))
+            }
+        }
+        if let priority = priority {
+            setClauses.append("priority = ?")
+            params.append(priority)
+        }
+
+        guard !setClauses.isEmpty else { return false }
+
+        setClauses.append("updated_at = ?")
+        params.append(ISO8601DateFormatter().string(from: Date()))
+        params.append(id)
+
+        let query = "UPDATE global_tasks SET \(setClauses.joined(separator: ", ")) WHERE id = ?"
+
+        var statement: OpaquePointer?
+        if sqlite3_prepare_v2(dbManager.db, query, -1, &statement, nil) == SQLITE_OK {
+            for (i, param) in params.enumerated() {
+                if let str = param as? String {
+                    sqlite3_bind_text(statement, Int32(i + 1), str, -1, SQLITE_TRANSIENT_TODO)
+                } else if let int = param as? Int {
+                    sqlite3_bind_int(statement, Int32(i + 1), Int32(int))
+                }
+            }
+
+            let result = sqlite3_step(statement) == SQLITE_DONE
+            sqlite3_finalize(statement)
+            return result
+        }
+        sqlite3_finalize(statement)
+        return false
+    }
+
+    /// Delete a global task
+    /// - Returns: true if successful
+    func deleteGlobalTask(id: Int) -> Bool {
+        guard dbManager.openDatabase() else { return false }
+        defer { dbManager.closeDatabase() }
+
+        // Set todos' global_task_id to NULL first
+        var statement: OpaquePointer?
+        let orphanQuery = "UPDATE todos SET global_task_id = NULL, updated_at = ? WHERE global_task_id = ?"
+        if sqlite3_prepare_v2(dbManager.db, orphanQuery, -1, &statement, nil) == SQLITE_OK {
+            let now = ISO8601DateFormatter().string(from: Date())
+            sqlite3_bind_text(statement, 1, now, -1, SQLITE_TRANSIENT_TODO)
+            sqlite3_bind_int(statement, 2, Int32(id))
+            sqlite3_step(statement)
+        }
+        sqlite3_finalize(statement)
+
+        // Then delete the global task
+        let deleteQuery = "DELETE FROM global_tasks WHERE id = ?"
+        if sqlite3_prepare_v2(dbManager.db, deleteQuery, -1, &statement, nil) == SQLITE_OK {
+            sqlite3_bind_int(statement, 1, Int32(id))
+            let result = sqlite3_step(statement) == SQLITE_DONE
+            sqlite3_finalize(statement)
+            return result
+        }
+        sqlite3_finalize(statement)
+        return false
+    }
+
     // MARK: - Helpers
 
     private func parseDate(_ ptr: UnsafePointer<UInt8>?) -> Date? {

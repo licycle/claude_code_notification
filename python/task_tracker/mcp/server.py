@@ -32,8 +32,10 @@ from .tools import (
     get_pending_todos,
 )
 
-# Configure logging
-LOG_DIR = Path.home() / '.claude-task-tracker' / 'logs'
+# Configure logging - support environment variable for log directory
+# This allows Swift app to specify log location when launching MCP server
+LOG_DIR = Path(os.environ.get('CLAUDE_LOG_DIR',
+               str(Path.home() / '.claude-task-tracker' / 'logs')))
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 LOG_FILE = LOG_DIR / 'mcp_server.log'
 

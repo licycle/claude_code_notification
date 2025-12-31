@@ -144,6 +144,7 @@ install_task_tracker() {
     cp "$tracker_src/services/notification.py" "$tracker_dir/services/"
     cp "$tracker_src/services/notification_formatter.py" "$tracker_dir/services/"
     cp "$tracker_src/services/todo_service.py" "$tracker_dir/services/" 2>/dev/null || true
+    cp "$tracker_src/services/project_decomposer.py" "$tracker_dir/services/" 2>/dev/null || true
 
     # Copy workflow module (for AI task decomposition)
     if [ -d "$tracker_src/workflow" ]; then

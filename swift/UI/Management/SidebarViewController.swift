@@ -41,8 +41,8 @@ class SidebarViewController: NSViewController {
     @objc private func languageDidChange() {
         titleLabel.stringValue = L(.app_title)
         // Update button titles
-        for (index, button) in buttons.enumerated() {
-            if let item = NavigationItem(rawValue: index), item != .reports {
+        for button in buttons {
+            if let item = NavigationItem(rawValue: button.tag) {
                 button.title = "  " + item.localizedTitle
             }
         }
@@ -120,8 +120,8 @@ class SidebarViewController: NSViewController {
     }
 
     private func updateSelection() {
-        for (index, button) in buttons.enumerated() {
-            let isSelected = index == selectedItem.rawValue
+        for button in buttons {
+            let isSelected = button.tag == selectedItem.rawValue
 
             if isSelected {
                 button.contentTintColor = .controlAccentColor

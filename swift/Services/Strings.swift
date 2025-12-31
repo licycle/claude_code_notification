@@ -106,7 +106,17 @@ enum StringKey: String, CaseIterable {
     // Navigation
     case nav_task_center
     case nav_reports
+    case nav_mcp
     case nav_settings
+
+    // ========== MCP Server ==========
+    case mcp_status_running
+    case mcp_status_stopped
+    case mcp_start
+    case mcp_stop
+    case mcp_restart
+    case mcp_log_title
+    case mcp_refresh_log
 
     // Task Center Table
     case table_account
@@ -220,6 +230,50 @@ enum StringKey: String, CaseIterable {
 
     // ========== Resume Link (New) ==========
     case detail_resumed_from
+
+    // ========== Todo Management ==========
+    case todo_edit
+    case todo_delete
+    case todo_mark_complete
+    case todo_mark_pending
+    case todo_delete_confirm_title
+    case todo_delete_confirm_message
+    case todo_title_placeholder
+    case todo_description
+    case todo_status
+    case todo_status_pending
+    case todo_status_in_progress
+    case todo_status_blocked
+    case todo_status_completed
+    case todo_status_cancelled
+    case todo_priority
+    case todo_priority_normal
+    case todo_priority_high
+    case todo_priority_urgent
+    case todo_estimated_time
+    case todo_minutes
+    case todo_project
+
+    // ========== Create Task/Todo ==========
+    case create_mode_task
+    case create_mode_todo
+    case create_task_title
+    case create_todo_title
+    case create_task_button
+    case create_todo_button
+    case create_task_projects
+    case create_todo_project
+    case create_task_decompose
+    case create_task_api_profile
+    case create_task_api_none
+    case create_task_api_no_profiles
+    case create_error_title_required
+    case create_error_project_required
+    case create_error_failed
+
+    // ========== Common ==========
+    case cancel
+    case save
 }
 
 // MARK: - String Translations
@@ -316,7 +370,17 @@ struct Strings {
         // Navigation
         .nav_task_center: [.english: "Task Center", .chinese: "任务中心"],
         .nav_reports: [.english: "Reports", .chinese: "报告分析"],
+        .nav_mcp: [.english: "MCP Server", .chinese: "MCP 服务"],
         .nav_settings: [.english: "Settings", .chinese: "设置"],
+
+        // MCP Server
+        .mcp_status_running: [.english: "Running", .chinese: "运行中"],
+        .mcp_status_stopped: [.english: "Stopped", .chinese: "已停止"],
+        .mcp_start: [.english: "Start", .chinese: "启动"],
+        .mcp_stop: [.english: "Stop", .chinese: "停止"],
+        .mcp_restart: [.english: "Restart", .chinese: "重启"],
+        .mcp_log_title: [.english: "Server Log", .chinese: "服务日志"],
+        .mcp_refresh_log: [.english: "Refresh", .chinese: "刷新"],
 
         // Task Center Table
         .table_account: [.english: "Account", .chinese: "账户"],
@@ -429,7 +493,51 @@ struct Strings {
         .usage_words: [.english: "words", .chinese: "单词"],
 
         // ========== Resume Link (New) ==========
-        .detail_resumed_from: [.english: "Resumed from:", .chinese: "恢复自:"]
+        .detail_resumed_from: [.english: "Resumed from:", .chinese: "恢复自:"],
+
+        // ========== Todo Management ==========
+        .todo_edit: [.english: "Edit", .chinese: "编辑"],
+        .todo_delete: [.english: "Delete", .chinese: "删除"],
+        .todo_mark_complete: [.english: "Mark Complete", .chinese: "标记完成"],
+        .todo_mark_pending: [.english: "Mark Pending", .chinese: "标记待处理"],
+        .todo_delete_confirm_title: [.english: "Delete Todo", .chinese: "删除任务"],
+        .todo_delete_confirm_message: [.english: "Are you sure you want to delete this todo? Child todos will become independent.", .chinese: "确定要删除此任务吗？子任务将变为独立任务。"],
+        .todo_title_placeholder: [.english: "Todo title", .chinese: "任务标题"],
+        .todo_description: [.english: "Description:", .chinese: "描述:"],
+        .todo_status: [.english: "Status:", .chinese: "状态:"],
+        .todo_status_pending: [.english: "Pending", .chinese: "待处理"],
+        .todo_status_in_progress: [.english: "In Progress", .chinese: "进行中"],
+        .todo_status_blocked: [.english: "Blocked", .chinese: "阻塞"],
+        .todo_status_completed: [.english: "Completed", .chinese: "已完成"],
+        .todo_status_cancelled: [.english: "Cancelled", .chinese: "已取消"],
+        .todo_priority: [.english: "Priority:", .chinese: "优先级:"],
+        .todo_priority_normal: [.english: "Normal", .chinese: "普通"],
+        .todo_priority_high: [.english: "High", .chinese: "高"],
+        .todo_priority_urgent: [.english: "Urgent", .chinese: "紧急"],
+        .todo_estimated_time: [.english: "Estimated:", .chinese: "预估时间:"],
+        .todo_minutes: [.english: "minutes", .chinese: "分钟"],
+        .todo_project: [.english: "Project:", .chinese: "项目:"],
+
+        // ========== Create Task/Todo ==========
+        .create_mode_task: [.english: "Global Task", .chinese: "全局任务"],
+        .create_mode_todo: [.english: "Single Todo", .chinese: "单独 Todo"],
+        .create_task_title: [.english: "Create Global Task", .chinese: "创建全局任务"],
+        .create_todo_title: [.english: "Add Todo", .chinese: "添加 Todo"],
+        .create_task_button: [.english: "Create Task", .chinese: "创建任务"],
+        .create_todo_button: [.english: "Add Todo", .chinese: "添加 Todo"],
+        .create_task_projects: [.english: "Target Projects (one per line):", .chinese: "目标项目（每行一个）:"],
+        .create_todo_project: [.english: "Project Path:", .chinese: "项目路径:"],
+        .create_task_decompose: [.english: "Auto-decompose into Todos (uses AI)", .chinese: "自动分解为 Todos（使用 AI）"],
+        .create_task_api_profile: [.english: "API Profile:", .chinese: "API Profile:"],
+        .create_task_api_none: [.english: "None (use Claude CLI)", .chinese: "无（使用 Claude CLI）"],
+        .create_task_api_no_profiles: [.english: "No profiles configured", .chinese: "未配置 profile"],
+        .create_error_title_required: [.english: "Title is required", .chinese: "请输入标题"],
+        .create_error_project_required: [.english: "Project path is required", .chinese: "请选择项目"],
+        .create_error_failed: [.english: "Failed to create", .chinese: "创建失败"],
+
+        // ========== Common ==========
+        .cancel: [.english: "Cancel", .chinese: "取消"],
+        .save: [.english: "Save", .chinese: "保存"]
     ]
 
     // MARK: - Lookup

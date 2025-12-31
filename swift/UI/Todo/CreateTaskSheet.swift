@@ -1,15 +1,36 @@
 import Cocoa
 
-/// Sheet for creating a new Global Task with optional auto-decomposition
+/// Sheet for creating a new Global Task or Todo
 class CreateTaskSheet: NSViewController {
 
+    // MARK: - Mode
+    enum CreateMode: Int {
+        case globalTask = 0  // Create global task with optional decomposition
+        case singleTodo = 1  // Create single todo directly
+    }
+
     // MARK: - Callbacks
-    var onTaskCreated: ((Int, Bool) -> Void)?  // (taskId, shouldDecompose)
+    var onTaskCreated: ((Int, Bool, String?, [String]) -> Void)?  // (taskId, shouldDecompose, apiProfile, projects)
+    var onTodoCreated: ((Int) -> Void)?  // (todoId)
     var onCancel: (() -> Void)?
 
+    // MARK: - Data
+    private var apiProfiles: [String] = []
+    private var currentMode: CreateMode = .globalTask
+
     // MARK: - UI Components
+    private lazy var modeSegment: NSSegmentedControl = {
+        let seg = NSSegmentedControl(labels: [
+            L(.create_mode_task),
+            L(.create_mode_todo)
+        ], trackingMode: .selectOne, target: self, action: #selector(modeChanged))
+        seg.selectedSegment = 0
+        seg.translatesAutoresizingMaskIntoConstraints = false
+        return seg
+    }()
+
     private lazy var titleLabel: NSTextField = {
-        let label = NSTextField(labelWithString: "Create New Task")
+        let label = NSTextField(labelWithString: L(.create_task_title))
         label.font = .boldSystemFont(ofSize: 16)
         label.translatesAutoresizingMaskIntoConstraints = false
         return label
@@ -90,10 +111,24 @@ class CreateTaskSheet: NSViewController {
     }()
 
     private lazy var decomposeCheckbox: NSButton = {
-        let button = NSButton(checkboxWithTitle: "Auto-decompose task into Todos (requires claude-todo)", target: nil, action: nil)
+        let button = NSButton(checkboxWithTitle: L(.create_task_decompose), target: self, action: #selector(decomposeChanged))
         button.state = .on
         button.translatesAutoresizingMaskIntoConstraints = false
         return button
+    }()
+
+    private lazy var apiProfileLabel: NSTextField = {
+        let label = NSTextField(labelWithString: L(.create_task_api_profile))
+        label.font = .systemFont(ofSize: 12)
+        label.textColor = .secondaryLabelColor
+        label.translatesAutoresizingMaskIntoConstraints = false
+        return label
+    }()
+
+    private lazy var apiProfilePopup: NSPopUpButton = {
+        let popup = NSPopUpButton()
+        popup.translatesAutoresizingMaskIntoConstraints = false
+        return popup
     }()
 
     private lazy var cancelButton: NSButton = {
@@ -124,18 +159,20 @@ class CreateTaskSheet: NSViewController {
     // MARK: - Lifecycle
 
     override func loadView() {
-        view = NSView(frame: NSRect(x: 0, y: 0, width: 500, height: 450))
+        view = NSView(frame: NSRect(x: 0, y: 0, width: 500, height: 500))
     }
 
     override func viewDidLoad() {
         super.viewDidLoad()
         setupUI()
         loadRecentProjects()
+        loadAPIProfiles()
     }
 
     // MARK: - Setup
 
     private func setupUI() {
+        view.addSubview(modeSegment)
         view.addSubview(titleLabel)
         view.addSubview(titleField)
         view.addSubview(descriptionLabel)
@@ -145,53 +182,66 @@ class CreateTaskSheet: NSViewController {
         view.addSubview(priorityLabel)
         view.addSubview(priorityPopup)
         view.addSubview(decomposeCheckbox)
+        view.addSubview(apiProfileLabel)
+        view.addSubview(apiProfilePopup)
         view.addSubview(cancelButton)
         view.addSubview(createButton)
         view.addSubview(statusLabel)
 
         NSLayoutConstraint.activate([
-            // Title
-            titleLabel.topAnchor.constraint(equalTo: view.topAnchor, constant: 20),
+            // Mode segment at top
+            modeSegment.topAnchor.constraint(equalTo: view.topAnchor, constant: 20),
+            modeSegment.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+
+            // Title label
+            titleLabel.topAnchor.constraint(equalTo: modeSegment.bottomAnchor, constant: 16),
             titleLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
 
             // Title field
-            titleField.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 16),
+            titleField.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 8),
             titleField.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
             titleField.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
 
-            // Description label
-            descriptionLabel.topAnchor.constraint(equalTo: titleField.bottomAnchor, constant: 16),
+            // Description label (for Todo mode only)
+            descriptionLabel.topAnchor.constraint(equalTo: titleField.bottomAnchor, constant: 12),
             descriptionLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
 
-            // Description field
+            // Description field (for Todo mode only)
             descriptionScrollView.topAnchor.constraint(equalTo: descriptionLabel.bottomAnchor, constant: 4),
             descriptionScrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
             descriptionScrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
-            descriptionScrollView.heightAnchor.constraint(equalToConstant: 80),
+            descriptionScrollView.heightAnchor.constraint(equalToConstant: 60),
 
             // Projects label
-            projectsLabel.topAnchor.constraint(equalTo: descriptionScrollView.bottomAnchor, constant: 16),
+            projectsLabel.topAnchor.constraint(equalTo: descriptionScrollView.bottomAnchor, constant: 12),
             projectsLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
 
             // Projects field
             projectsScrollView.topAnchor.constraint(equalTo: projectsLabel.bottomAnchor, constant: 4),
             projectsScrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
             projectsScrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
-            projectsScrollView.heightAnchor.constraint(equalToConstant: 80),
+            projectsScrollView.heightAnchor.constraint(equalToConstant: 60),
 
-            // Priority
-            priorityLabel.topAnchor.constraint(equalTo: projectsScrollView.bottomAnchor, constant: 16),
+            // Priority (for Todo mode only)
+            priorityLabel.topAnchor.constraint(equalTo: projectsScrollView.bottomAnchor, constant: 12),
             priorityLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
             priorityPopup.centerYAnchor.constraint(equalTo: priorityLabel.centerYAnchor),
             priorityPopup.leadingAnchor.constraint(equalTo: priorityLabel.trailingAnchor, constant: 8),
             priorityPopup.widthAnchor.constraint(equalToConstant: 120),
 
-            // Decompose checkbox
-            decomposeCheckbox.topAnchor.constraint(equalTo: priorityLabel.bottomAnchor, constant: 16),
+            // Decompose checkbox (for Task mode only)
+            decomposeCheckbox.topAnchor.constraint(equalTo: projectsScrollView.bottomAnchor, constant: 12),
             decomposeCheckbox.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
 
+            // API Profile selection (for Task mode only)
+            apiProfileLabel.topAnchor.constraint(equalTo: decomposeCheckbox.bottomAnchor, constant: 8),
+            apiProfileLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 40),
+            apiProfilePopup.centerYAnchor.constraint(equalTo: apiProfileLabel.centerYAnchor),
+            apiProfilePopup.leadingAnchor.constraint(equalTo: apiProfileLabel.trailingAnchor, constant: 8),
+            apiProfilePopup.widthAnchor.constraint(equalToConstant: 200),
+
             // Status label
-            statusLabel.topAnchor.constraint(equalTo: decomposeCheckbox.bottomAnchor, constant: 8),
+            statusLabel.topAnchor.constraint(equalTo: apiProfileLabel.bottomAnchor, constant: 8),
             statusLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
 
             // Buttons
@@ -201,12 +251,78 @@ class CreateTaskSheet: NSViewController {
             createButton.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -20),
             createButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
         ])
+
+        // Initially update UI based on mode
+        updateUIForMode()
+    }
+
+    @objc private func modeChanged(_ sender: NSSegmentedControl) {
+        currentMode = CreateMode(rawValue: sender.selectedSegment) ?? .globalTask
+        updateUIForMode()
+    }
+
+    private func updateUIForMode() {
+        let isTaskMode = currentMode == .globalTask
+        let isTodoMode = currentMode == .singleTodo
+
+        // Update title label
+        titleLabel.stringValue = isTaskMode ? L(.create_task_title) : L(.create_todo_title)
+
+        // Update button title
+        createButton.title = isTaskMode ? L(.create_task_button) : L(.create_todo_button)
+
+        // Task mode: hide description and priority (only title + projects + decompose)
+        descriptionLabel.isHidden = isTaskMode
+        descriptionScrollView.isHidden = isTaskMode
+        priorityLabel.isHidden = isTaskMode
+        priorityPopup.isHidden = isTaskMode
+
+        // Task mode: show decompose and API profile
+        decomposeCheckbox.isHidden = isTodoMode
+        let showApiProfile = isTaskMode && decomposeCheckbox.state == .on
+        apiProfileLabel.isHidden = !showApiProfile
+        apiProfilePopup.isHidden = !showApiProfile
+
+        // Update projects label
+        projectsLabel.stringValue = isTaskMode
+            ? L(.create_task_projects)
+            : L(.create_todo_project)
     }
 
     private func loadRecentProjects() {
         // Load unique project paths from sessions
         let projects = DatabaseManager.shared.getUniqueProjects(limit: 10)
         projectsField.string = projects.joined(separator: "\n")
+    }
+
+    private func loadAPIProfiles() {
+        // Load API profiles in background
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let profiles = APIProfileManager.shared.listProfiles()
+            DispatchQueue.main.async {
+                self?.apiProfiles = profiles
+                self?.updateAPIProfilePopup()
+            }
+        }
+    }
+
+    private func updateAPIProfilePopup() {
+        apiProfilePopup.removeAllItems()
+        apiProfilePopup.addItem(withTitle: L(.create_task_api_none))
+
+        for profile in apiProfiles {
+            apiProfilePopup.addItem(withTitle: profile)
+        }
+
+        // If no profiles available, show a hint
+        if apiProfiles.isEmpty {
+            apiProfilePopup.addItem(withTitle: L(.create_task_api_no_profiles))
+            apiProfilePopup.lastItem?.isEnabled = false
+        }
+    }
+
+    @objc private func decomposeChanged(_ sender: NSButton) {
+        updateUIForMode()
     }
 
     // MARK: - Actions
@@ -220,13 +336,12 @@ class CreateTaskSheet: NSViewController {
         let title = titleField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard !title.isEmpty else {
-            showError("Title is required")
+            showError(L(.create_error_title_required))
             return
         }
 
         let description = descriptionField.string.trimmingCharacters(in: .whitespacesAndNewlines)
         let priority = priorityPopup.indexOfSelectedItem
-        let shouldDecompose = decomposeCheckbox.state == .on
 
         // Get project paths
         let projects = projectsField.string
@@ -234,34 +349,68 @@ class CreateTaskSheet: NSViewController {
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
 
-        // Create global task in database
-        let taskId = TodoDatabaseManager.shared.createGlobalTask(
-            title: title,
-            description: description.isEmpty ? nil : description,
-            priority: priority
-        )
-
-        guard taskId > 0 else {
-            showError("Failed to create task")
-            return
-        }
-
-        // If not decomposing, create a simple todo for each project
-        if !shouldDecompose && !projects.isEmpty {
-            for project in projects {
-                _ = TodoDatabaseManager.shared.createTodo(
-                    globalTaskId: taskId,
-                    projectPath: project,
-                    title: title,
-                    description: description.isEmpty ? nil : description,
-                    priority: priority
-                )
+        if currentMode == .singleTodo {
+            // Create single todo directly
+            guard let project = projects.first else {
+                showError(L(.create_error_project_required))
+                return
             }
-        }
 
-        // Notify and close
-        onTaskCreated?(taskId, shouldDecompose)
-        dismiss(nil)
+            let todoId = TodoDatabaseManager.shared.createTodo(
+                globalTaskId: nil,
+                projectPath: project,
+                title: title,
+                description: description.isEmpty ? nil : description,
+                priority: priority
+            )
+
+            guard todoId > 0 else {
+                showError(L(.create_error_failed))
+                return
+            }
+
+            onTodoCreated?(todoId)
+            dismiss(nil)
+
+        } else {
+            // Create global task
+            let shouldDecompose = decomposeCheckbox.state == .on
+
+            // Get selected API profile (nil if first item "None" is selected)
+            var selectedProfile: String? = nil
+            if shouldDecompose && apiProfilePopup.indexOfSelectedItem > 0 {
+                selectedProfile = apiProfilePopup.titleOfSelectedItem
+            }
+
+            // Create global task in database
+            let taskId = TodoDatabaseManager.shared.createGlobalTask(
+                title: title,
+                description: description.isEmpty ? nil : description,
+                priority: priority
+            )
+
+            guard taskId > 0 else {
+                showError(L(.create_error_failed))
+                return
+            }
+
+            // If not decomposing, create a simple todo for each project
+            if !shouldDecompose && !projects.isEmpty {
+                for project in projects {
+                    _ = TodoDatabaseManager.shared.createTodo(
+                        globalTaskId: taskId,
+                        projectPath: project,
+                        title: title,
+                        description: description.isEmpty ? nil : description,
+                        priority: priority
+                    )
+                }
+            }
+
+            // Notify and close
+            onTaskCreated?(taskId, shouldDecompose, selectedProfile, projects)
+            dismiss(nil)
+        }
     }
 
     private func showError(_ message: String) {

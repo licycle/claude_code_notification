@@ -26,6 +26,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     func applicationDidFinishLaunching(_ notification: Notification) {
         log("APP_LAUNCH: App started")
 
+        // Start MCP server
+        MCPServerManager.shared.start()
+
         // Setup standard Edit menu for copy/paste support
         setupEditMenu()
 
@@ -68,6 +71,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 log("APP_LAUNCH: Launched from notification, staying in background")
             }
         }
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        log("APP_TERMINATE: App terminating, stopping MCP server")
+        MCPServerManager.shared.stop()
     }
 
     // MARK: - Handle App Reopen (click app icon while running)
