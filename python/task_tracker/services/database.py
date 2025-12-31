@@ -141,6 +141,134 @@ CREATE TABLE IF NOT EXISTS session_usage (
 );
 
 CREATE INDEX IF NOT EXISTS idx_session_usage_session ON session_usage(session_pk);
+
+-- ============================================================================
+-- Global Task & Todo System Tables (v2.0)
+-- ============================================================================
+
+-- global_tasks 表：全局任务，跨项目的高层次目标
+CREATE TABLE IF NOT EXISTS global_tasks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    description TEXT,
+    status TEXT DEFAULT 'active' CHECK (status IN ('active', 'completed', 'archived')),
+    priority INTEGER DEFAULT 0 CHECK (priority IN (0, 1, 2)),  -- 0=normal, 1=high, 2=urgent
+    created_at TEXT DEFAULT (datetime('now', 'localtime')),
+    updated_at TEXT DEFAULT (datetime('now', 'localtime')),
+    completed_at TEXT,
+    metadata_json TEXT  -- 扩展字段，存储任意元数据
+);
+
+CREATE INDEX IF NOT EXISTS idx_global_tasks_status ON global_tasks(status);
+CREATE INDEX IF NOT EXISTS idx_global_tasks_priority ON global_tasks(priority);
+
+-- todos 表：项目级 Todo，支持层级
+CREATE TABLE IF NOT EXISTS todos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    global_task_id INTEGER,                 -- 关联全局任务 (可NULL表示独立Todo)
+    parent_todo_id INTEGER,                 -- 父Todo (支持子任务层级)
+    project_path TEXT NOT NULL,             -- 项目路径
+    title TEXT NOT NULL,
+    description TEXT,
+    status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'blocked', 'completed', 'cancelled')),
+    priority INTEGER DEFAULT 0 CHECK (priority IN (0, 1, 2)),
+    estimated_minutes INTEGER,              -- 预估时间（分钟）
+    actual_minutes INTEGER,                 -- 实际时间（分钟）
+    created_at TEXT DEFAULT (datetime('now', 'localtime')),
+    updated_at TEXT DEFAULT (datetime('now', 'localtime')),
+    completed_at TEXT,
+    completion_summary TEXT,                -- AI 生成的完成总结
+    metadata_json TEXT,
+    FOREIGN KEY (global_task_id) REFERENCES global_tasks(id) ON DELETE SET NULL,
+    FOREIGN KEY (parent_todo_id) REFERENCES todos(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_todos_global_task ON todos(global_task_id);
+CREATE INDEX IF NOT EXISTS idx_todos_parent ON todos(parent_todo_id);
+CREATE INDEX IF NOT EXISTS idx_todos_project ON todos(project_path);
+CREATE INDEX IF NOT EXISTS idx_todos_status ON todos(status);
+CREATE INDEX IF NOT EXISTS idx_todos_priority ON todos(priority);
+
+-- todo_dependencies 表：Todo 之间的依赖关系
+CREATE TABLE IF NOT EXISTS todo_dependencies (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    todo_id INTEGER NOT NULL,
+    depends_on_todo_id INTEGER NOT NULL,
+    created_at TEXT DEFAULT (datetime('now', 'localtime')),
+    FOREIGN KEY (todo_id) REFERENCES todos(id) ON DELETE CASCADE,
+    FOREIGN KEY (depends_on_todo_id) REFERENCES todos(id) ON DELETE CASCADE,
+    UNIQUE (todo_id, depends_on_todo_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_todo_deps_todo ON todo_dependencies(todo_id);
+CREATE INDEX IF NOT EXISTS idx_todo_deps_depends_on ON todo_dependencies(depends_on_todo_id);
+
+-- session_todo_links 表：Session 与 Todo 的关联
+CREATE TABLE IF NOT EXISTS session_todo_links (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_pk INTEGER NOT NULL,
+    todo_id INTEGER NOT NULL,
+    started_at TEXT DEFAULT (datetime('now', 'localtime')),
+    ended_at TEXT,
+    status TEXT DEFAULT 'working' CHECK (status IN ('working', 'completed', 'paused', 'cancelled')),
+    notes TEXT,
+    FOREIGN KEY (session_pk) REFERENCES sessions(id) ON DELETE CASCADE,
+    FOREIGN KEY (todo_id) REFERENCES todos(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_session_todo_links_session ON session_todo_links(session_pk);
+CREATE INDEX IF NOT EXISTS idx_session_todo_links_todo ON session_todo_links(todo_id);
+CREATE INDEX IF NOT EXISTS idx_session_todo_links_status ON session_todo_links(status);
+
+-- todo_executions 表：Todo 执行记录（操作日志）
+CREATE TABLE IF NOT EXISTS todo_executions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    todo_id INTEGER NOT NULL,
+    session_pk INTEGER,                     -- 可为NULL（非Session触发的操作）
+    action TEXT NOT NULL CHECK (action IN ('created', 'started', 'paused', 'resumed', 'blocked', 'unblocked', 'completed', 'cancelled', 'split', 'note')),
+    actor TEXT DEFAULT 'user' CHECK (actor IN ('user', 'claude_code', 'system', 'ai')),
+    details_json TEXT,                      -- 操作详情（如拆分信息、阻塞原因等）
+    created_at TEXT DEFAULT (datetime('now', 'localtime')),
+    FOREIGN KEY (todo_id) REFERENCES todos(id) ON DELETE CASCADE,
+    FOREIGN KEY (session_pk) REFERENCES sessions(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_todo_executions_todo ON todo_executions(todo_id);
+CREATE INDEX IF NOT EXISTS idx_todo_executions_session ON todo_executions(session_pk);
+CREATE INDEX IF NOT EXISTS idx_todo_executions_action ON todo_executions(action);
+CREATE INDEX IF NOT EXISTS idx_todo_executions_created ON todo_executions(created_at);
+
+-- workflow_runs 表：工作流运行记录
+CREATE TABLE IF NOT EXISTS workflow_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    workflow_name TEXT NOT NULL,
+    task_id INTEGER,                        -- 关联全局任务（可为NULL）
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'completed', 'failed', 'cancelled')),
+    current_step TEXT,
+    context_json TEXT,                      -- 工作流上下文
+    started_at TEXT,
+    completed_at TEXT,
+    created_at TEXT DEFAULT (datetime('now', 'localtime')),
+    FOREIGN KEY (task_id) REFERENCES global_tasks(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_workflow_runs_task ON workflow_runs(task_id);
+CREATE INDEX IF NOT EXISTS idx_workflow_runs_status ON workflow_runs(status);
+
+-- workflow_step_logs 表：工作流步骤执行日志
+CREATE TABLE IF NOT EXISTS workflow_step_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id INTEGER NOT NULL,
+    step_id TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('pending', 'running', 'completed', 'failed', 'skipped')),
+    output_json TEXT,
+    error TEXT,
+    started_at TEXT,
+    completed_at TEXT,
+    FOREIGN KEY (run_id) REFERENCES workflow_runs(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_workflow_step_logs_run ON workflow_step_logs(run_id);
 """
 
 

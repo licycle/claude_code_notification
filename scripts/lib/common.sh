@@ -31,3 +31,30 @@ cecho() {
 get_script_dir() {
     cd "$(dirname "$0")" && pwd
 }
+
+# Check and install Python dependencies for workflow engine
+install_python_deps() {
+    cecho "${YELLOW}Checking Python dependencies...${NC}"
+
+    # Check pyyaml (required for workflow YAML parsing)
+    if ! python3 -c "import yaml" 2>/dev/null; then
+        cecho "${YELLOW}  Installing pyyaml...${NC}"
+        pip3 install --user pyyaml --quiet 2>/dev/null || {
+            cecho "${RED}  Warning: Failed to install pyyaml. Workflow features may not work.${NC}"
+        }
+    else
+        cecho "${GREEN}  ✓ pyyaml${NC}"
+    fi
+
+    # Check jinja2 (optional, has fallback)
+    if ! python3 -c "import jinja2" 2>/dev/null; then
+        cecho "${YELLOW}  Installing jinja2 (optional)...${NC}"
+        pip3 install --user jinja2 --quiet 2>/dev/null || {
+            cecho "${YELLOW}  Note: jinja2 not installed. Using simple template fallback.${NC}"
+        }
+    else
+        cecho "${GREEN}  ✓ jinja2${NC}"
+    fi
+
+    cecho "${GREEN}Python dependencies ready${NC}"
+}

@@ -143,6 +143,40 @@ install_task_tracker() {
     cp "$tracker_src/services/summary_service.py" "$tracker_dir/services/"
     cp "$tracker_src/services/notification.py" "$tracker_dir/services/"
     cp "$tracker_src/services/notification_formatter.py" "$tracker_dir/services/"
+    cp "$tracker_src/services/todo_service.py" "$tracker_dir/services/" 2>/dev/null || true
+
+    # Copy workflow module (for AI task decomposition)
+    if [ -d "$tracker_src/workflow" ]; then
+        mkdir -p "$tracker_dir/workflow"
+        cp "$tracker_src/workflow/__init__.py" "$tracker_dir/workflow/" 2>/dev/null || touch "$tracker_dir/workflow/__init__.py"
+        cp "$tracker_src/workflow/engine.py" "$tracker_dir/workflow/" 2>/dev/null || true
+        cp "$tracker_src/workflow/claude_agent.py" "$tracker_dir/workflow/" 2>/dev/null || true
+        cp "$tracker_src/workflow/hooks.py" "$tracker_dir/workflow/" 2>/dev/null || true
+    fi
+
+    # Copy workflow definitions (YAML files)
+    if [ -d "$tracker_src/workflows" ]; then
+        mkdir -p "$tracker_dir/workflows"
+        cp "$tracker_src/workflows/"*.yaml "$tracker_dir/workflows/" 2>/dev/null || true
+    fi
+
+    # Copy MCP module (for MCP server integration)
+    if [ -d "$tracker_src/mcp" ]; then
+        mkdir -p "$tracker_dir/mcp"
+        cp "$tracker_src/mcp/__init__.py" "$tracker_dir/mcp/" 2>/dev/null || touch "$tracker_dir/mcp/__init__.py"
+        cp "$tracker_src/mcp/server.py" "$tracker_dir/mcp/" 2>/dev/null || true
+        cp "$tracker_src/mcp/tools.py" "$tracker_dir/mcp/" 2>/dev/null || true
+        cp "$tracker_src/mcp/config.py" "$tracker_dir/mcp/" 2>/dev/null || true
+    fi
+
+    # Copy CLI module
+    if [ -d "$tracker_src/cli" ]; then
+        mkdir -p "$tracker_dir/cli"
+        cp "$tracker_src/cli/__init__.py" "$tracker_dir/cli/" 2>/dev/null || touch "$tracker_dir/cli/__init__.py"
+        cp "$tracker_src/cli/todo_cli.py" "$tracker_dir/cli/" 2>/dev/null || true
+        cp "$tracker_src/cli/api_manager.py" "$tracker_dir/cli/" 2>/dev/null || true
+        cp "$tracker_src/cli/account_manager.py" "$tracker_dir/cli/" 2>/dev/null || true
+    fi
 
     # Initialize database
     python3 -c "

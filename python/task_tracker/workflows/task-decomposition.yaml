@@ -1,0 +1,177 @@
+name: "task-decomposition"
+version: "1.0"
+description: "Decompose global task into project-level todos"
+
+inputs:
+  task_id:
+    type: integer
+    required: true
+    description: "Global task ID"
+  task_title:
+    type: string
+    required: true
+    description: "Task title"
+  task_description:
+    type: string
+    required: false
+    description: "Task description"
+  project_paths:
+    type: array
+    required: true
+    description: "List of project paths to analyze"
+
+steps:
+  - id: analyze_projects
+    name: "Analyze Project Structure"
+    type: claude_agent
+    config:
+      timeout: 180
+      output_format: json
+    prompt: |
+      Analyze the following project(s) for task decomposition:
+      {% for path in inputs.project_paths %}
+      - {{ path }}
+      {% endfor %}
+
+      Task Context:
+      Title: {{ inputs.task_title }}
+      Description: {{ inputs.task_description }}
+
+      Please explore the codebase using Glob/Grep/Read tools and provide:
+      1. Project type and tech stack
+      2. Files relevant to this task
+      3. Existing patterns to follow
+      4. Suggested implementation approach
+
+      Return your analysis in JSON format.
+    hooks:
+      before:
+        - validate_project_paths
+      after:
+        - cache_analysis_result
+
+  - id: generate_todos
+    name: "Generate Todo List"
+    type: claude_agent
+    depends_on: [analyze_projects]
+    config:
+      timeout: 120
+    prompt: |
+      Based on the project analysis, generate specific todos for the task:
+
+      Task: {{ inputs.task_title }}
+      Description: {{ inputs.task_description }}
+      Analysis: {{ steps.analyze_projects.output }}
+
+      Generate todos in JSON format:
+      {
+        "todos": [
+          {
+            "project_path": "/path/to/project",
+            "title": "Short actionable title (verb + object)",
+            "description": "Detailed description",
+            "priority": 0,
+            "estimated_minutes": 60,
+            "acceptance_criteria": ["Criterion 1", "Criterion 2"]
+          }
+        ],
+        "execution_order": [0, 1, 2],
+        "total_estimated_hours": 8.5
+      }
+
+      Requirements:
+      - Each todo should be atomic and independently completable
+      - Use action verbs: Implement, Add, Fix, Refactor, Test
+      - Avoid vague words: Optimize, Improve, Handle
+      - Include specific file/module references
+    hooks:
+      after:
+        - validate_todos
+        - calculate_total_time
+
+  - id: user_confirmation
+    name: "User Confirmation"
+    type: interactive
+    depends_on: [generate_todos]
+    config:
+      display_mode: preview
+      allow_edit: true
+
+  - id: save_todos
+    name: "Save Todos"
+    type: action
+    depends_on: [user_confirmation]
+    condition: "{{ steps.user_confirmation.output.confirmed }}"
+    action: save_todos_to_database
+    hooks:
+      after:
+        - notify_completion
+
+hooks:
+  validate_project_paths:
+    type: python
+    script: |
+      from pathlib import Path
+      import json, os
+      context = json.loads(os.environ['HOOK_CONTEXT'])
+      errors = []
+      for path in context['inputs']['project_paths']:
+          if not Path(path).exists():
+              errors.append(f"Project path does not exist: {path}")
+      if errors:
+          raise ValueError("\\n".join(errors))
+      print(json.dumps({"valid": True}))
+
+  cache_analysis_result:
+    type: python
+    script: |
+      import json, hashlib, os
+      from pathlib import Path
+      context = json.loads(os.environ['HOOK_CONTEXT'])
+      step_output = json.loads(os.environ.get('STEP_OUTPUT', '{}'))
+      paths_str = str(sorted(context['inputs']['project_paths']))
+      cache_key = hashlib.md5(paths_str.encode()).hexdigest()
+      cache_dir = Path.home() / '.claude-task-tracker' / 'cache'
+      cache_dir.mkdir(parents=True, exist_ok=True)
+      (cache_dir / f'analysis_{cache_key}.json').write_text(json.dumps(step_output))
+      print(json.dumps({"cached": True, "cache_key": cache_key}))
+
+  validate_todos:
+    type: python
+    script: |
+      import json, os
+      step_output = json.loads(os.environ.get('STEP_OUTPUT', '{}'))
+      todos = step_output.get('todos', [])
+      if not todos:
+          raise ValueError("No todos generated")
+      for i, todo in enumerate(todos):
+          if not todo.get('title'):
+              raise ValueError(f"Todo {i} missing title")
+          if not todo.get('project_path'):
+              raise ValueError(f"Todo {i} missing project_path")
+      print(json.dumps({"valid": True, "count": len(todos)}))
+
+  calculate_total_time:
+    type: python
+    script: |
+      import json, os
+      step_output = json.loads(os.environ.get('STEP_OUTPUT', '{}'))
+      todos = step_output.get('todos', [])
+      total_minutes = sum(t.get('estimated_minutes', 60) for t in todos)
+      step_output['total_estimated_hours'] = round(total_minutes / 60, 1)
+      print(json.dumps(step_output))
+
+  notify_completion:
+    type: shell
+    command: |
+      if [ -f ~/Applications/ClaudeMonitor.app/Contents/MacOS/ClaudeMonitor ]; then
+        ~/Applications/ClaudeMonitor.app/Contents/MacOS/ClaudeMonitor notify "Task Decomposition" "Todos created successfully"
+      fi
+
+error_handling:
+  retry:
+    max_attempts: 2
+    backoff: exponential
+  fallback:
+    analyze_projects:
+      action: use_cached_analysis

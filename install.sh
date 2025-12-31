@@ -21,6 +21,9 @@ if [ "$1" = "--hooks-only" ] || [ "$1" = "-p" ]; then
         exit 1
     fi
 
+    # Install Python dependencies
+    install_python_deps
+
     # Delete old database and reinitialize
     cecho "${YELLOW}Resetting database...${NC}"
     rm -f "$HOME/.claude-task-tracker/tasks.db"
@@ -116,6 +119,10 @@ install_cli_scripts "$CLI_SRC" "$BASE_DIR"
 
 # ================= 3.5 Task Tracker Installation =================
 cecho "\n${BLUE}--- Installing Task Tracker ---${NC}"
+
+# Install Python dependencies (pyyaml, jinja2)
+install_python_deps
+
 TRACKER_SRC="$SCRIPT_DIR/python/task_tracker"
 install_task_tracker "$TRACKER_SRC" "$TRACKER_DIR"
 
