@@ -545,6 +545,11 @@ def cmd_task_decompose(args):
             sys.exit(1)
         print(f"Using API profile: {api_profile}")
 
+    # Handle account alias
+    account_alias = getattr(args, 'account_alias', None)
+    if account_alias:
+        print(f"Using account: {account_alias}")
+
     print(f"Decomposing task #{task.id}: {task.title}")
     print(f"Projects: {', '.join(project_paths)}")
     print("Analyzing codebase with Claude CLI...")
@@ -554,6 +559,7 @@ def cmd_task_decompose(args):
         decomposer = ProjectDecomposer(
             project_paths=project_paths,
             api_profile=api_profile,
+            account_alias=account_alias,
             timeout=600,
             max_turns=15
         )
@@ -776,6 +782,7 @@ def main():
     decompose_p.add_argument('task_id', type=int, help='Task ID to decompose')
     decompose_p.add_argument('--projects', nargs='+', help='Project paths to analyze')
     decompose_p.add_argument('--api-profile', dest='api_profile', help='API profile name from claude-api (e.g., kimi)')
+    decompose_p.add_argument('--account-alias', '-a', dest='account_alias', help='Account alias (e.g., c1, c2)')
     decompose_p.add_argument('--interactive', '-i', action='store_true',
                             help='Interactive mode: preview and confirm before saving')
     decompose_p.add_argument('--json', action='store_true')

@@ -19,16 +19,19 @@ class BackgroundTaskRunner {
     ///   - taskId: The global task ID to decompose
     ///   - projects: List of project paths to analyze
     ///   - apiProfile: Optional API profile to use (e.g., "kimi")
+    ///   - accountAlias: Optional account alias to use (e.g., "c1", "c2")
     ///   - completion: Called when decomposition completes with success/failure
     func runDecompose(
         taskId: Int,
         projects: [String],
         apiProfile: String? = nil,
+        accountAlias: String? = nil,
         completion: @escaping (Bool, String?) -> Void
     ) {
         log("BackgroundTaskRunner: runDecompose called for task \(taskId)")
         log("BackgroundTaskRunner: projects = \(projects)")
         log("BackgroundTaskRunner: apiProfile = \(apiProfile ?? "nil")")
+        log("BackgroundTaskRunner: accountAlias = \(accountAlias ?? "default")")
 
         queue.async { [weak self] in
             guard let self = self else { return }
@@ -51,6 +54,11 @@ class BackgroundTaskRunner {
                 args.append(profile)
             }
 
+            if let alias = accountAlias {
+                args.append("--account-alias")
+                args.append(alias)
+            }
+
             process.arguments = args
             log("BackgroundTaskRunner: Full command = \(args.joined(separator: " "))")
 
@@ -61,9 +69,27 @@ class BackgroundTaskRunner {
                 process.currentDirectoryURL = hooksDir
             }
 
-            // Set environment
+            // Set environment with Claude Monitor variables
             var env = ProcessInfo.processInfo.environment
             env["PYTHONPATH"] = hooksDir.path
+
+            // Set Claude Monitor environment variables for session tracking
+            env["CLAUDE_PENDING_SESSION_ID"] = UUID().uuidString
+            env["CLAUDE_TERM_BUNDLE_ID"] = "com.claude.monitor"
+            env["CLAUDE_TERM_PID"] = String(ProcessInfo.processInfo.processIdentifier)
+            env["CLAUDE_SHELL_PID"] = String(ProcessInfo.processInfo.processIdentifier)
+            env["CLAUDE_CG_WINDOW_ID"] = "0"
+
+            if let alias = accountAlias {
+                env["CLAUDE_ACCOUNT_ALIAS"] = alias
+                // Get config directory for the account
+                if let configDir = AccountManager.shared.getConfigDir(for: alias) {
+                    env["CLAUDE_CONFIG_DIR"] = configDir
+                }
+            } else {
+                env["CLAUDE_ACCOUNT_ALIAS"] = "default"
+            }
+
             process.environment = env
 
             // Capture output

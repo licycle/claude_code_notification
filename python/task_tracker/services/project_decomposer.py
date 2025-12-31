@@ -7,12 +7,13 @@ Replaces the complex workflow engine approach.
 """
 import subprocess
 import json
-import shutil
 import os
 import re
 from dataclasses import dataclass, field
 from typing import Optional, Dict, Any, List
 from pathlib import Path
+
+from task_tracker.hooks.utils import log
 
 
 # ============================================================================
@@ -20,6 +21,18 @@ from pathlib import Path
 # ============================================================================
 
 API_PROFILES_PATH = Path.home() / '.claude-hooks' / 'api_profiles.json'
+ACCOUNTS_PATH = Path.home() / '.claude-hooks' / 'accounts.json'
+
+
+def load_accounts() -> Dict[str, str]:
+    """Load accounts from accounts.json"""
+    if not ACCOUNTS_PATH.exists():
+        return {}
+    try:
+        with open(ACCOUNTS_PATH) as f:
+            return json.load(f)
+    except (json.JSONDecodeError, IOError):
+        return {}
 
 
 # ============================================================================
@@ -199,49 +212,21 @@ class ProjectDecomposer:
         self,
         project_paths: List[str],
         api_profile: str = None,
+        account_alias: str = None,
         timeout: int = 300,
         max_turns: int = 15
     ):
         self.project_paths = [str(Path(p).resolve()) for p in project_paths]
         self.api_profile = api_profile
+        self.account_alias = account_alias or 'default'
         self.timeout = timeout
         self.max_turns = max_turns
 
-        # Load API profile settings
-        self._api_base_url = ""
-        self._api_key = ""
-        self._model = ""
-        if api_profile:
-            profile = load_api_profile(api_profile)
-            if profile:
-                self._api_base_url = profile.get('ANTHROPIC_BASE_URL', '')
-                self._api_key = profile.get('ANTHROPIC_AUTH_TOKEN', '')
-                self._model = profile.get('ANTHROPIC_MODEL', '')
-
-        # Find Claude CLI
-        self._claude_path = self._find_claude()
-
-    def _find_claude(self) -> Optional[str]:
-        """Find Claude CLI executable"""
-        paths = [
-            shutil.which('claude'),
-            '/usr/local/bin/claude',
-            '/opt/homebrew/bin/claude',
-            str(Path.home() / '.local' / 'bin' / 'claude'),
-        ]
-
-        # Scan nvm node versions dynamically
-        nvm_node_dir = Path.home() / '.nvm' / 'versions' / 'node'
-        if nvm_node_dir.exists():
-            for version_dir in sorted(nvm_node_dir.iterdir(), reverse=True):
-                claude_path = version_dir / 'bin' / 'claude'
-                if claude_path.exists():
-                    paths.append(str(claude_path))
-
-        for path in paths:
-            if path and Path(path).exists():
-                return path
-        return None
+        # Log initialization
+        log("DECOMPOSE", f"ProjectDecomposer initialized")
+        log("DECOMPOSE", f"  project_paths: {self.project_paths}")
+        log("DECOMPOSE", f"  api_profile: {self.api_profile}")
+        log("DECOMPOSE", f"  account_alias: {self.account_alias}")
 
     def validate_projects(self) -> None:
         """Validate that all project paths exist"""
@@ -271,13 +256,11 @@ class ProjectDecomposer:
             OutputParseError: If JSON parsing fails
             ValidationError: If todos are invalid
         """
+        # Log start
+        log("DECOMPOSE", f"Starting decomposition: {task_title}")
+
         # Validate
         self.validate_projects()
-
-        if not self._claude_path:
-            raise ClaudeNotFoundError(
-                "Claude CLI not found. Please install claude-code."
-            )
 
         # Build prompt
         prompt = self._build_prompt(task_title, task_description)
@@ -354,37 +337,43 @@ class ProjectDecomposer:
         )
 
     def _execute_claude(self, prompt: str) -> str:
-        """Execute Claude CLI with structured output"""
-        cmd = [
-            self._claude_path,
-            "-p", prompt,
-            "--allowedTools", "Read,Grep,Glob",
-            "--max-turns", str(self.max_turns),
-        ]
+        """Execute Claude CLI directly with environment variables"""
+        # Get config_path from accounts.json
+        accounts = load_accounts()
+        config_path = accounts.get(self.account_alias)
+        if not config_path:
+            config_path = str(Path.home() / '.claude')
+            log("DECOMPOSE", f"  Account '{self.account_alias}' not found, using default: {config_path}")
 
-        # Prepare environment with API profile
-        env = os.environ.copy()
-
-        # Ensure node is in PATH (scan nvm versions dynamically)
-        nvm_node_dir = Path.home() / '.nvm' / 'versions' / 'node'
-        if nvm_node_dir.exists():
-            node_paths = sorted(nvm_node_dir.iterdir(), reverse=True)  # newest first
-            extra_paths = [str(p / 'bin') for p in node_paths if p.is_dir()]
-            extra_paths.extend(['/opt/homebrew/bin', '/usr/local/bin'])
-            current_path = env.get('PATH', '/usr/bin:/bin')
-            env['PATH'] = ':'.join(extra_paths) + ':' + current_path
-
-        if self._api_base_url:
-            env['ANTHROPIC_BASE_URL'] = self._api_base_url
-        if self._api_key:
-            env['ANTHROPIC_AUTH_TOKEN'] = self._api_key
-        if self._model:
-            env['ANTHROPIC_MODEL'] = self._model
-        # Disable non-essential traffic for third-party APIs
-        if self._api_base_url:
-            env['CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC'] = '1'
+        # Log execution start
+        log("DECOMPOSE", f"Executing claude directly: {self.account_alias}")
+        log("DECOMPOSE", f"  Config path: {config_path}")
+        log("DECOMPOSE", f"  API profile: {self.api_profile or 'none'}")
+        log("DECOMPOSE", f"  Working dir: {self.project_paths[0]}")
 
         try:
+            # Build environment with API profile
+            env = os.environ.copy()
+            env['CLAUDE_CONFIG_DIR'] = config_path
+            env['CLAUDE_ACCOUNT_ALIAS'] = self.account_alias
+
+            # Load API profile if specified
+            if self.api_profile:
+                profile = load_api_profile(self.api_profile)
+                if profile:
+                    env.update(profile)
+                    log("DECOMPOSE", f"  API profile loaded: {list(profile.keys())}")
+
+            # Build command args
+            cmd = [
+                'claude',
+                '-p', prompt,
+                '--allowedTools', 'Read,Grep,Glob',
+                '--max-turns', str(self.max_turns)
+            ]
+
+            log("DECOMPOSE", f"  Command: {' '.join(cmd[:5])}...")
+
             result = subprocess.run(
                 cmd,
                 cwd=self.project_paths[0],
@@ -394,16 +383,27 @@ class ProjectDecomposer:
                 env=env
             )
 
+            log("DECOMPOSE", f"  Exit code: {result.returncode}")
+
+            # Check for EMFILE error (too many open files)
+            if 'EMFILE' in result.stderr:
+                log("DECOMPOSE_ERROR", "EMFILE: too many open files")
+                raise DecomposeError(
+                    "Too many open files (EMFILE). "
+                    "Please run in a new terminal or restart terminal."
+                )
+
             if result.returncode != 0:
                 error_msg = result.stderr or f"Exit code: {result.returncode}"
+                log("DECOMPOSE_ERROR", f"Claude CLI failed: {error_msg}")
                 raise DecomposeError(f"Claude CLI failed: {error_msg}")
 
+            log("DECOMPOSE", f"  Output length: {len(result.stdout)} chars")
             return result.stdout
 
         except subprocess.TimeoutExpired:
+            log("DECOMPOSE_ERROR", f"Timeout after {self.timeout}s")
             raise ClaudeTimeoutError(f"Claude CLI timed out after {self.timeout}s")
-        except FileNotFoundError:
-            raise ClaudeNotFoundError("Claude CLI executable not found")
 
     def _parse_result(self, output: str) -> DecomposeResult:
         """Extract JSON from Claude output with multiple fallback strategies"""

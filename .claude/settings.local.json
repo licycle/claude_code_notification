@@ -83,7 +83,8 @@
       "Bash(if ps -p $pid)",
       "Bash(./scripts/lib/swift_build.sh:*)",
       "Bash(pkill:*)",
-      "Bash(PYTHONPATH=./python python3:*)"
+      "Bash(PYTHONPATH=./python python3:*)",
+      "WebFetch(domain:api.anthropic.com)"
     ]
   },
   "sandbox": {

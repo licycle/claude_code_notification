@@ -10,12 +10,13 @@ class CreateTaskSheet: NSViewController {
     }
 
     // MARK: - Callbacks
-    var onTaskCreated: ((Int, Bool, String?, [String]) -> Void)?  // (taskId, shouldDecompose, apiProfile, projects)
+    var onTaskCreated: ((Int, Bool, String?, String?, [String]) -> Void)?  // (taskId, shouldDecompose, apiProfile, accountAlias, projects)
     var onTodoCreated: ((Int) -> Void)?  // (todoId)
     var onCancel: (() -> Void)?
 
     // MARK: - Data
     private var apiProfiles: [String] = []
+    private var accounts: [String] = []
     private var currentMode: CreateMode = .globalTask
 
     // MARK: - UI Components
@@ -131,6 +132,20 @@ class CreateTaskSheet: NSViewController {
         return popup
     }()
 
+    private lazy var accountLabel: NSTextField = {
+        let label = NSTextField(labelWithString: "Account:")
+        label.font = .systemFont(ofSize: 12)
+        label.textColor = .secondaryLabelColor
+        label.translatesAutoresizingMaskIntoConstraints = false
+        return label
+    }()
+
+    private lazy var accountPopup: NSPopUpButton = {
+        let popup = NSPopUpButton()
+        popup.translatesAutoresizingMaskIntoConstraints = false
+        return popup
+    }()
+
     private lazy var cancelButton: NSButton = {
         let button = NSButton(title: "Cancel", target: self, action: #selector(cancelClicked))
         button.bezelStyle = .rounded
@@ -167,6 +182,7 @@ class CreateTaskSheet: NSViewController {
         setupUI()
         loadRecentProjects()
         loadAPIProfiles()
+        loadAccounts()
     }
 
     // MARK: - Setup
@@ -184,6 +200,8 @@ class CreateTaskSheet: NSViewController {
         view.addSubview(decomposeCheckbox)
         view.addSubview(apiProfileLabel)
         view.addSubview(apiProfilePopup)
+        view.addSubview(accountLabel)
+        view.addSubview(accountPopup)
         view.addSubview(cancelButton)
         view.addSubview(createButton)
         view.addSubview(statusLabel)
@@ -240,8 +258,15 @@ class CreateTaskSheet: NSViewController {
             apiProfilePopup.leadingAnchor.constraint(equalTo: apiProfileLabel.trailingAnchor, constant: 8),
             apiProfilePopup.widthAnchor.constraint(equalToConstant: 200),
 
+            // Account selection (for Task mode only)
+            accountLabel.topAnchor.constraint(equalTo: apiProfileLabel.bottomAnchor, constant: 8),
+            accountLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 40),
+            accountPopup.centerYAnchor.constraint(equalTo: accountLabel.centerYAnchor),
+            accountPopup.leadingAnchor.constraint(equalTo: accountLabel.trailingAnchor, constant: 8),
+            accountPopup.widthAnchor.constraint(equalToConstant: 200),
+
             // Status label
-            statusLabel.topAnchor.constraint(equalTo: apiProfileLabel.bottomAnchor, constant: 8),
+            statusLabel.topAnchor.constraint(equalTo: accountLabel.bottomAnchor, constant: 8),
             statusLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
 
             // Buttons
@@ -277,11 +302,13 @@ class CreateTaskSheet: NSViewController {
         priorityLabel.isHidden = isTaskMode
         priorityPopup.isHidden = isTaskMode
 
-        // Task mode: show decompose and API profile
+        // Task mode: show decompose, API profile, and account
         decomposeCheckbox.isHidden = isTodoMode
-        let showApiProfile = isTaskMode && decomposeCheckbox.state == .on
-        apiProfileLabel.isHidden = !showApiProfile
-        apiProfilePopup.isHidden = !showApiProfile
+        let showDecomposeOptions = isTaskMode && decomposeCheckbox.state == .on
+        apiProfileLabel.isHidden = !showDecomposeOptions
+        apiProfilePopup.isHidden = !showDecomposeOptions
+        accountLabel.isHidden = !showDecomposeOptions
+        accountPopup.isHidden = !showDecomposeOptions
 
         // Update projects label
         projectsLabel.stringValue = isTaskMode
@@ -318,6 +345,32 @@ class CreateTaskSheet: NSViewController {
         if apiProfiles.isEmpty {
             apiProfilePopup.addItem(withTitle: L(.create_task_api_no_profiles))
             apiProfilePopup.lastItem?.isEnabled = false
+        }
+    }
+
+    private func loadAccounts() {
+        // Load accounts in background
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let accountList = AccountManager.shared.listAccounts()
+            DispatchQueue.main.async {
+                self?.accounts = accountList
+                self?.updateAccountPopup()
+            }
+        }
+    }
+
+    private func updateAccountPopup() {
+        accountPopup.removeAllItems()
+        accountPopup.addItem(withTitle: "Default")
+
+        for account in accounts {
+            accountPopup.addItem(withTitle: account)
+        }
+
+        // If no accounts available, show a hint
+        if accounts.isEmpty {
+            accountPopup.addItem(withTitle: "(No accounts configured)")
+            accountPopup.lastItem?.isEnabled = false
         }
     }
 
@@ -382,6 +435,12 @@ class CreateTaskSheet: NSViewController {
                 selectedProfile = apiProfilePopup.titleOfSelectedItem
             }
 
+            // Get selected account alias (nil if first item "Default" is selected)
+            var selectedAccount: String? = nil
+            if shouldDecompose && accountPopup.indexOfSelectedItem > 0 {
+                selectedAccount = accountPopup.titleOfSelectedItem
+            }
+
             // Create global task in database
             let taskId = TodoDatabaseManager.shared.createGlobalTask(
                 title: title,
@@ -408,7 +467,7 @@ class CreateTaskSheet: NSViewController {
             }
 
             // Notify and close
-            onTaskCreated?(taskId, shouldDecompose, selectedProfile, projects)
+            onTaskCreated?(taskId, shouldDecompose, selectedProfile, selectedAccount, projects)
             dismiss(nil)
         }
     }

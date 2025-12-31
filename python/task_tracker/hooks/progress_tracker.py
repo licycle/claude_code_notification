@@ -104,7 +104,11 @@ def handle_todo_write(session_id: str, tool_input, project_name: str):
     if in_progress:
         update_session_status(session_id, 'working')
     elif completed == total and total > 0:
-        update_session_status(session_id, 'completed')
+        # Only auto-complete if session is in 'working' status
+        # Don't auto-complete idle or waiting sessions
+        session = get_session(session_id)
+        if session and session['current_status'] == 'working':
+            update_session_status(session_id, 'completed')
 
 
 def handle_ask_user_question(session_id: str, tool_input, project_name: str):

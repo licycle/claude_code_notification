@@ -82,6 +82,9 @@ def cleanup_active_sessions_by_shell_pid(shell_pid: int) -> int:
     Called when a new Claude Code instance starts in the same shell.
     This ensures old sessions are marked as completed before creating new ones.
 
+    Note: Excludes idle, waiting, and rate_limited sessions to prevent
+    accidentally closing sessions that are waiting for user input.
+
     Returns:
         Number of sessions cleaned up
     """
@@ -91,7 +94,8 @@ def cleanup_active_sessions_by_shell_pid(shell_pid: int) -> int:
             """UPDATE sessions
                SET current_status = 'completed', last_activity = ?
                WHERE shell_pid = ?
-               AND current_status != 'completed'""",
+               AND current_status NOT IN ('completed', 'idle', 'waiting_for_user',
+                                          'waiting_permission', 'rate_limited')""",
             (now, shell_pid)
         )
         return cursor.rowcount

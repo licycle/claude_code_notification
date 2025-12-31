@@ -24,9 +24,13 @@ if [ "$1" = "--hooks-only" ] || [ "$1" = "-p" ]; then
     # Install Python dependencies
     install_python_deps
 
-    # Delete old database and reinitialize
-    cecho "${YELLOW}Resetting database...${NC}"
-    rm -f "$HOME/.claude-task-tracker/tasks.db"
+    # Check if database reset is requested
+    if [ "$2" = "-r" ] || [ "$2" = "--reset-db" ]; then
+        cecho "${YELLOW}Resetting database...${NC}"
+        rm -f "$HOME/.claude-task-tracker/tasks.db"
+    else
+        cecho "${GREEN}Keeping existing database${NC}"
+    fi
 
     # Use library function to install task tracker
     cecho "${YELLOW}Updating hook scripts and services...${NC}"

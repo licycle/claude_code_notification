@@ -72,11 +72,20 @@ class TodoListView: NSView {
     }()
 
     private lazy var createButton: NSButton = {
-        let button = NSButton(title: "+", target: self, action: #selector(createTaskClicked))
+        let button = NSButton(title: "＋ Create Task", target: self, action: #selector(createTaskClicked))
         button.translatesAutoresizingMaskIntoConstraints = false
         button.bezelStyle = .rounded
-        button.font = .boldSystemFont(ofSize: 14)
+        button.font = .systemFont(ofSize: 13, weight: .medium)
         button.toolTip = "Create new task"
+        return button
+    }()
+
+    private lazy var refreshButton: NSButton = {
+        let button = NSButton(title: "↻", target: self, action: #selector(refreshClicked))
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.bezelStyle = .rounded
+        button.font = .systemFont(ofSize: 14)
+        button.toolTip = "Refresh list"
         return button
     }()
 
@@ -112,22 +121,29 @@ class TodoListView: NSView {
 
         addSubview(filterSegment)
         addSubview(createButton)
+        addSubview(refreshButton)
         addSubview(statsLabel)
         addSubview(scrollView)
         addSubview(emptyLabel)
 
         NSLayoutConstraint.activate([
-            filterSegment.topAnchor.constraint(equalTo: topAnchor, constant: 8),
-            filterSegment.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            // Create button at top left - more prominent
+            createButton.topAnchor.constraint(equalTo: topAnchor, constant: 8),
+            createButton.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
 
-            createButton.centerYAnchor.constraint(equalTo: filterSegment.centerYAnchor),
-            createButton.leadingAnchor.constraint(equalTo: filterSegment.trailingAnchor, constant: 12),
-            createButton.widthAnchor.constraint(equalToConstant: 30),
+            // Refresh button next to create
+            refreshButton.centerYAnchor.constraint(equalTo: createButton.centerYAnchor),
+            refreshButton.leadingAnchor.constraint(equalTo: createButton.trailingAnchor, constant: 8),
+            refreshButton.widthAnchor.constraint(equalToConstant: 30),
 
-            statsLabel.centerYAnchor.constraint(equalTo: filterSegment.centerYAnchor),
+            // Filter segment after buttons
+            filterSegment.centerYAnchor.constraint(equalTo: createButton.centerYAnchor),
+            filterSegment.leadingAnchor.constraint(equalTo: refreshButton.trailingAnchor, constant: 12),
+
+            statsLabel.centerYAnchor.constraint(equalTo: createButton.centerYAnchor),
             statsLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
 
-            scrollView.topAnchor.constraint(equalTo: filterSegment.bottomAnchor, constant: 8),
+            scrollView.topAnchor.constraint(equalTo: createButton.bottomAnchor, constant: 8),
             scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
             scrollView.bottomAnchor.constraint(equalTo: bottomAnchor),
@@ -142,15 +158,16 @@ class TodoListView: NSView {
         guard let window = self.window else { return }
 
         let sheet = CreateTaskSheet()
-        sheet.onTaskCreated = { [weak self] taskId, shouldDecompose, apiProfile, projects in
-            log("TodoListView: onTaskCreated callback - taskId=\(taskId), shouldDecompose=\(shouldDecompose), projects=\(projects)")
+        sheet.onTaskCreated = { [weak self] taskId, shouldDecompose, apiProfile, accountAlias, projects in
+            log("TodoListView: onTaskCreated callback - taskId=\(taskId), shouldDecompose=\(shouldDecompose), account=\(accountAlias ?? "default"), projects=\(projects)")
             if shouldDecompose && !projects.isEmpty {
                 log("TodoListView: Starting decomposition...")
                 // Run decomposition in background with user-provided projects
                 BackgroundTaskRunner.shared.runDecompose(
                     taskId: taskId,
                     projects: projects,
-                    apiProfile: apiProfile
+                    apiProfile: apiProfile,
+                    accountAlias: accountAlias
                 ) { success, message in
                     if success {
                         log("Task \(taskId) decomposed successfully")
@@ -319,6 +336,11 @@ class TodoListView: NSView {
     }
 
     // MARK: - Actions
+
+    @objc private func refreshClicked() {
+        log("TodoListView: refreshClicked")
+        loadData()
+    }
 
     @objc private func filterChanged(_ sender: NSSegmentedControl) {
         switch sender.selectedSegment {

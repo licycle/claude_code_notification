@@ -399,8 +399,10 @@ def main():
         write_hook_output()
         return
 
-    # Update session status
-    update_session_status(session_id, 'idle')
+    # Update session status (don't overwrite important states)
+    session = get_session(session_id)
+    if session and session['current_status'] not in ('rate_limited', 'waiting_permission'):
+        update_session_status(session_id, 'idle')
 
     # Handle Todo completion if enabled
     if TODO_ENABLED:

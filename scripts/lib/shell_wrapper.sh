@@ -76,7 +76,7 @@ _claude_wrapper() {
     (
         if [ -n "\$api_profile" ]; then
             eval "\$(python3 "\$_CLAUDE_API_MANAGER" get-env "\$api_profile")"
-            echo "🚀 API Profile Active: \$api_profile"
+            echo "🚀 API Profile Active: \$api_profile" >&2
         fi
 
         export CLAUDE_TERM_BUNDLE_ID="\${detected_bundle:-com.apple.Terminal}"
@@ -251,7 +251,7 @@ _claude_wrapper() {
     (
         if [ -n "$api_profile" ]; then
             eval "$(python3 "$_CLAUDE_API_MANAGER" get-env "$api_profile")"
-            echo "🚀 API Profile Active: $api_profile"
+            echo "🚀 API Profile Active: $api_profile" >&2
         fi
 
         export CLAUDE_TERM_BUNDLE_ID="${detected_bundle:-com.apple.Terminal}"
