@@ -585,4 +585,34 @@ class DatabaseManager {
             return "\(days)" + L(.time_days_ago)
         }
     }
+
+    // MARK: - Project Queries
+
+    func getUniqueProjects(limit: Int = 20) -> [String] {
+        guard openDatabase() else { return [] }
+        defer { closeDatabase() }
+
+        var projects: [String] = []
+        let query = """
+            SELECT DISTINCT project FROM sessions
+            WHERE project IS NOT NULL AND project != ''
+            ORDER BY last_activity DESC
+            LIMIT ?
+            """
+
+        var statement: OpaquePointer?
+        if sqlite3_prepare_v2(db, query, -1, &statement, nil) == SQLITE_OK {
+            sqlite3_bind_int(statement, 1, Int32(limit))
+
+            while sqlite3_step(statement) == SQLITE_ROW {
+                if let projectPtr = sqlite3_column_text(statement, 0) {
+                    let project = String(cString: projectPtr)
+                    projects.append(project)
+                }
+            }
+        }
+        sqlite3_finalize(statement)
+
+        return projects
+    }
 }

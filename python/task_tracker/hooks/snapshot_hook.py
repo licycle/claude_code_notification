@@ -29,6 +29,40 @@ from services.notification import (
     notify_task_idle, notify_decision_needed, send_rich_notification
 )
 
+# Import todo service for Todo completion handling
+try:
+    from services.todo_service import (
+        get_linked_todos_for_session,
+        update_session_todo_link_status,
+    )
+    from services.database import get_session_pk
+    TODO_ENABLED = True
+except ImportError:
+    TODO_ENABLED = False
+
+
+def handle_todo_completion(session_id: str):
+    """Update linked todos when session ends (goes idle)."""
+    if not TODO_ENABLED:
+        return
+
+    session_pk = get_session_pk(session_id)
+    if not session_pk:
+        return
+
+    # Get todos linked to this session
+    linked_todos = get_linked_todos_for_session(session_pk)
+    if not linked_todos:
+        return
+
+    log("SNAPSHOT", f"Found {len(linked_todos)} linked todos for session")
+
+    for link in linked_todos:
+        if link.status == 'active':
+            # Session ended, mark link as paused (not completed - user must explicitly complete)
+            update_session_todo_link_status(link.id, 'paused', notes="Session went idle")
+            log("SNAPSHOT", f"Paused todo link #{link.id} (todo #{link.todo_id})")
+
 # Rate limit detection keywords
 RATE_LIMIT_KEYWORDS = [
     'rate limit', 'rate_limit', 'too many requests',
@@ -367,6 +401,13 @@ def main():
 
     # Update session status
     update_session_status(session_id, 'idle')
+
+    # Handle Todo completion if enabled
+    if TODO_ENABLED:
+        try:
+            handle_todo_completion(session_id)
+        except Exception as e:
+            log("SNAPSHOT", f"Todo completion handling failed: {e}")
 
     # Send notification
     if pending_question:

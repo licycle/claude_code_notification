@@ -15,8 +15,48 @@ from utils import read_hook_input, write_hook_output, log, get_project_name, get
 from services.database import (
     get_session, create_session, add_timeline_event, resolve_pending_decisions,
     update_session_status, link_pending_session, update_session_shell_pid,
-    add_prompt, get_prompt_count, cleanup_pending_session
+    add_prompt, get_prompt_count, cleanup_pending_session, get_session_pk
 )
+
+# Import todo service for Todo awareness
+try:
+    from services.todo_service import (
+        get_pending_todos_for_project,
+        link_session_to_todo,
+        get_in_progress_todos,
+    )
+    TODO_ENABLED = True
+except ImportError:
+    TODO_ENABLED = False
+
+
+def check_and_link_todo(session_id: str, project_path: str):
+    """Check for pending/in_progress todos in this project and link session to them."""
+    if not TODO_ENABLED:
+        return
+
+    # Get session pk for linking
+    session_pk = get_session_pk(session_id)
+    if not session_pk:
+        log("GOAL", "Could not get session pk for todo linking")
+        return
+
+    # First check if there's an in_progress todo for this project
+    in_progress = get_in_progress_todos()
+    for todo in in_progress:
+        if todo.project_path == project_path:
+            # Found an in_progress todo for this project, link to it
+            link_session_to_todo(session_pk, todo.id, notes="Auto-linked on session start")
+            log("GOAL", f"Linked session to in_progress todo #{todo.id}: {todo.title[:50]}")
+            return
+
+    # Otherwise check for pending todos
+    pending = get_pending_todos_for_project(project_path, limit=5)
+    if pending:
+        log("GOAL", f"Found {len(pending)} pending todos for project")
+        # Just log, don't auto-link pending todos (user should explicitly start them)
+        for todo in pending[:3]:
+            log("GOAL", f"  - Todo #{todo.id}: {todo.title[:50]}")
 
 
 def main():
@@ -90,6 +130,13 @@ def main():
         # Record full prompt for display
         add_prompt(session_id, prompt, round_number=1)
         log("GOAL", f"Prompt recorded (round 1, {len(prompt)} chars)")
+
+        # Todo awareness: check for pending todos in this project
+        if TODO_ENABLED:
+            try:
+                check_and_link_todo(session_id, cwd)
+            except Exception as e:
+                log("GOAL", f"Todo awareness failed: {e}")
     else:
         # Existing session - this is a resume or continuation
         # Clean up any pending session since we're using an existing one

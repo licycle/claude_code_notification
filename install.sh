@@ -36,6 +36,17 @@ if [ "$1" = "--hooks-only" ] || [ "$1" = "-p" ]; then
     cecho "${YELLOW}Updating shell wrapper...${NC}"
     update_shell_wrapper_preserve_aliases "$CONFIG_FILE"
 
+    # Update slash commands
+    cecho "${YELLOW}Updating slash commands...${NC}"
+    COMMANDS_SRC="$SCRIPT_DIR/commands"
+    COMMANDS_DEST="$HOME/.claude/commands"
+    mkdir -p "$COMMANDS_DEST"
+    if [ -d "$COMMANDS_SRC" ]; then
+        for cmd_file in "$COMMANDS_SRC"/*.md; do
+            [ -f "$cmd_file" ] && cp "$cmd_file" "$COMMANDS_DEST/"
+        done
+    fi
+
     cecho "${GREEN}Hooks updated${NC}"
     cecho "   Source: ${BLUE}$TRACKER_SRC${NC}"
     cecho "   Target: ${BLUE}$TRACKER_DIR${NC}"
@@ -130,6 +141,25 @@ install_task_tracker "$TRACKER_SRC" "$TRACKER_DIR"
 SUMMARY_CONFIG_DIR="$HOME/.claude-task-tracker"
 mkdir -p "$SUMMARY_CONFIG_DIR"
 run_summary_wizard "$SUMMARY_CONFIG_DIR/config.json"
+
+# ================= 3.6 Install Slash Commands =================
+cecho "\n${BLUE}--- Installing Slash Commands ---${NC}"
+COMMANDS_SRC="$SCRIPT_DIR/commands"
+COMMANDS_DEST="$HOME/.claude/commands"
+mkdir -p "$COMMANDS_DEST"
+
+if [ -d "$COMMANDS_SRC" ]; then
+    for cmd_file in "$COMMANDS_SRC"/*.md; do
+        if [ -f "$cmd_file" ]; then
+            cmd_name=$(basename "$cmd_file")
+            cp "$cmd_file" "$COMMANDS_DEST/$cmd_name"
+            cecho "   Installed: ${GREEN}/$(basename "$cmd_name" .md)${NC}"
+        fi
+    done
+    cecho "${GREEN}Slash commands installed${NC}"
+else
+    cecho "${YELLOW}No slash commands found in $COMMANDS_SRC${NC}"
+fi
 
 # ================= Generate Shell Config =================
 cecho "${YELLOW}Generating Shell Integration...${NC}"

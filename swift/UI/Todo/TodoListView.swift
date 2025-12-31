@@ -68,6 +68,15 @@ class TodoListView: NSView {
         return label
     }()
 
+    private lazy var createButton: NSButton = {
+        let button = NSButton(title: "+", target: self, action: #selector(createTaskClicked))
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.bezelStyle = .rounded
+        button.font = .boldSystemFont(ofSize: 14)
+        button.toolTip = "Create new task"
+        return button
+    }()
+
     // MARK: - Initialization
 
     override init(frame frameRect: NSRect) {
@@ -99,6 +108,7 @@ class TodoListView: NSView {
         scrollView.documentView = tableView
 
         addSubview(filterSegment)
+        addSubview(createButton)
         addSubview(statsLabel)
         addSubview(scrollView)
         addSubview(emptyLabel)
@@ -106,6 +116,10 @@ class TodoListView: NSView {
         NSLayoutConstraint.activate([
             filterSegment.topAnchor.constraint(equalTo: topAnchor, constant: 8),
             filterSegment.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+
+            createButton.centerYAnchor.constraint(equalTo: filterSegment.centerYAnchor),
+            createButton.leadingAnchor.constraint(equalTo: filterSegment.trailingAnchor, constant: 12),
+            createButton.widthAnchor.constraint(equalToConstant: 30),
 
             statsLabel.centerYAnchor.constraint(equalTo: filterSegment.centerYAnchor),
             statsLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
@@ -118,6 +132,31 @@ class TodoListView: NSView {
             emptyLabel.centerXAnchor.constraint(equalTo: centerXAnchor),
             emptyLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
+    }
+
+    @objc private func createTaskClicked() {
+        // Find the window to present sheet
+        guard let window = self.window else { return }
+
+        let sheet = CreateTaskSheet()
+        sheet.onTaskCreated = { [weak self] taskId, shouldDecompose in
+            if shouldDecompose {
+                // Run decomposition in background
+                let projects = DatabaseManager.shared.getUniqueProjects(limit: 5)
+                BackgroundTaskRunner.shared.runDecompose(taskId: taskId, projects: projects) { success, message in
+                    if success {
+                        log("Task \(taskId) decomposed successfully")
+                    } else {
+                        log("Task \(taskId) decomposition failed: \(message ?? "unknown error")")
+                    }
+                    self?.loadData()
+                }
+            } else {
+                self?.loadData()
+            }
+        }
+
+        window.contentViewController?.presentAsSheet(sheet)
     }
 
     private func setupObservers() {

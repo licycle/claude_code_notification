@@ -167,7 +167,7 @@ class TodoDatabaseManager {
             }
 
             while sqlite3_step(statement) == SQLITE_ROW {
-                if var todo = parseTodo(statement: statement) {
+                if let todo = parseTodo(statement: statement) {
                     todos.append(todo)
                 }
             }
@@ -437,6 +437,96 @@ class TodoDatabaseManager {
             completedAt: completedAt,
             createdAt: createdAt
         )
+    }
+
+    // MARK: - Write Operations
+
+    /// Create a new global task
+    /// - Returns: The ID of the created task, or 0 on failure
+    func createGlobalTask(title: String, description: String?, priority: Int) -> Int {
+        guard dbManager.openDatabase() else { return 0 }
+        defer { dbManager.closeDatabase() }
+
+        let now = ISO8601DateFormatter().string(from: Date())
+
+        let query = """
+            INSERT INTO global_tasks (title, description, status, priority, created_at, updated_at)
+            VALUES (?, ?, 'active', ?, ?, ?)
+            """
+
+        var statement: OpaquePointer?
+        if sqlite3_prepare_v2(dbManager.db, query, -1, &statement, nil) == SQLITE_OK {
+            sqlite3_bind_text(statement, 1, title, -1, SQLITE_TRANSIENT_TODO)
+            if let desc = description {
+                sqlite3_bind_text(statement, 2, desc, -1, SQLITE_TRANSIENT_TODO)
+            } else {
+                sqlite3_bind_null(statement, 2)
+            }
+            sqlite3_bind_int(statement, 3, Int32(priority))
+            sqlite3_bind_text(statement, 4, now, -1, SQLITE_TRANSIENT_TODO)
+            sqlite3_bind_text(statement, 5, now, -1, SQLITE_TRANSIENT_TODO)
+
+            if sqlite3_step(statement) == SQLITE_DONE {
+                let taskId = Int(sqlite3_last_insert_rowid(dbManager.db))
+                sqlite3_finalize(statement)
+                return taskId
+            }
+        }
+        sqlite3_finalize(statement)
+        return 0
+    }
+
+    /// Create a new todo
+    /// - Returns: The ID of the created todo, or 0 on failure
+    func createTodo(
+        globalTaskId: Int?,
+        projectPath: String,
+        title: String,
+        description: String?,
+        priority: Int,
+        estimatedMinutes: Int? = nil
+    ) -> Int {
+        guard dbManager.openDatabase() else { return 0 }
+        defer { dbManager.closeDatabase() }
+
+        let now = ISO8601DateFormatter().string(from: Date())
+
+        let query = """
+            INSERT INTO todos (global_task_id, project_path, title, description, status, priority, estimated_minutes, created_at, updated_at)
+            VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?)
+            """
+
+        var statement: OpaquePointer?
+        if sqlite3_prepare_v2(dbManager.db, query, -1, &statement, nil) == SQLITE_OK {
+            if let taskId = globalTaskId {
+                sqlite3_bind_int(statement, 1, Int32(taskId))
+            } else {
+                sqlite3_bind_null(statement, 1)
+            }
+            sqlite3_bind_text(statement, 2, projectPath, -1, SQLITE_TRANSIENT_TODO)
+            sqlite3_bind_text(statement, 3, title, -1, SQLITE_TRANSIENT_TODO)
+            if let desc = description {
+                sqlite3_bind_text(statement, 4, desc, -1, SQLITE_TRANSIENT_TODO)
+            } else {
+                sqlite3_bind_null(statement, 4)
+            }
+            sqlite3_bind_int(statement, 5, Int32(priority))
+            if let minutes = estimatedMinutes {
+                sqlite3_bind_int(statement, 6, Int32(minutes))
+            } else {
+                sqlite3_bind_null(statement, 6)
+            }
+            sqlite3_bind_text(statement, 7, now, -1, SQLITE_TRANSIENT_TODO)
+            sqlite3_bind_text(statement, 8, now, -1, SQLITE_TRANSIENT_TODO)
+
+            if sqlite3_step(statement) == SQLITE_DONE {
+                let todoId = Int(sqlite3_last_insert_rowid(dbManager.db))
+                sqlite3_finalize(statement)
+                return todoId
+            }
+        }
+        sqlite3_finalize(statement)
+        return 0
     }
 
     // MARK: - Helpers

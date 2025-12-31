@@ -12,10 +12,18 @@ class TaskCenterViewController: NSViewController {
 
     weak var delegate: TaskCenterViewControllerDelegate?
 
+    // Tab switching
+    private var tabSegment: NSSegmentedControl!
+    private var currentTab: Int = 0  // 0 = Sessions, 1 = Todos
+
+    // Sessions view components
     private var filterBar: TaskFilterBar!
     private var tableView: NSTableView!
     private var scrollView: NSScrollView!
     private var statusLabel: NSTextField!
+
+    // Todos view component
+    private var todoListView: TodoListView!
 
     private var sessions: [SessionInfo] = []
     private var filteredSessions: [SessionInfo] = []
@@ -50,7 +58,13 @@ class TaskCenterViewController: NSViewController {
     }
 
     private func setupUI() {
-        // Filter bar (44px height)
+        // Tab segment control at top
+        tabSegment = NSSegmentedControl(labels: ["Sessions", "Todos"], trackingMode: .selectOne, target: self, action: #selector(tabChanged(_:)))
+        tabSegment.selectedSegment = 0
+        tabSegment.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(tabSegment)
+
+        // Filter bar (44px height) - for Sessions tab
         filterBar = TaskFilterBar(frame: .zero)
         filterBar.delegate = self
         filterBar.translatesAutoresizingMaskIntoConstraints = false
@@ -63,24 +77,63 @@ class TaskCenterViewController: NSViewController {
         statusLabel.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(statusLabel)
 
-        // Table view
+        // Table view for Sessions
         setupTableView()
+
+        // Todo list view
+        todoListView = TodoListView(frame: .zero)
+        todoListView.translatesAutoresizingMaskIntoConstraints = false
+        todoListView.isHidden = true
+        view.addSubview(todoListView)
 
         // Layout
         NSLayoutConstraint.activate([
-            filterBar.topAnchor.constraint(equalTo: view.topAnchor),
+            // Tab segment at top center
+            tabSegment.topAnchor.constraint(equalTo: view.topAnchor, constant: 8),
+            tabSegment.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+
+            // Filter bar below tab
+            filterBar.topAnchor.constraint(equalTo: tabSegment.bottomAnchor, constant: 8),
             filterBar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             filterBar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             filterBar.heightAnchor.constraint(equalToConstant: 44),
 
+            // Sessions table view
             scrollView.topAnchor.constraint(equalTo: filterBar.bottomAnchor),
             scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             scrollView.bottomAnchor.constraint(equalTo: statusLabel.topAnchor, constant: -4),
 
+            // Todos list view (same position as scrollView)
+            todoListView.topAnchor.constraint(equalTo: tabSegment.bottomAnchor, constant: 8),
+            todoListView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            todoListView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            todoListView.bottomAnchor.constraint(equalTo: statusLabel.topAnchor, constant: -4),
+
+            // Status label at bottom
             statusLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 12),
             statusLabel.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -8)
         ])
+    }
+
+    @objc private func tabChanged(_ sender: NSSegmentedControl) {
+        currentTab = sender.selectedSegment
+        updateTabVisibility()
+    }
+
+    private func updateTabVisibility() {
+        let isSessionsTab = currentTab == 0
+        filterBar.isHidden = !isSessionsTab
+        scrollView.isHidden = !isSessionsTab
+        todoListView.isHidden = isSessionsTab
+
+        if isSessionsTab {
+            updateStatusLabel()
+        } else {
+            todoListView.refresh()
+            let stats = TodoDatabaseManager.shared.getTotalPendingTodosCount()
+            statusLabel.stringValue = "\(stats) pending todos"
+        }
     }
 
     private func setupTableView() {
@@ -139,6 +192,9 @@ class TaskCenterViewController: NSViewController {
     func refresh() {
         loadData()
         filterBar.reloadAccounts()
+        if currentTab == 1 {
+            todoListView.refresh()
+        }
     }
 
     private func applyFilters() {

@@ -201,6 +201,25 @@ else
     fi
 fi
 
+# 3.5 Remove installed slash commands
+echo "Checking for installed slash commands..."
+COMMANDS_DIR="$HOME/.claude/commands"
+REMOVED_COMMANDS=0
+
+# List of commands installed by this project
+for cmd_name in "hl-todo"; do
+    cmd_file="$COMMANDS_DIR/${cmd_name}.md"
+    if [ -f "$cmd_file" ]; then
+        rm -f "$cmd_file"
+        echo "Removed: /$cmd_name command"
+        REMOVED_COMMANDS=$((REMOVED_COMMANDS + 1))
+    fi
+done
+
+if [ $REMOVED_COMMANDS -gt 0 ]; then
+    cecho "${GREEN}Removed $REMOVED_COMMANDS slash command(s)${NC}"
+fi
+
 # 4. Clean Shell Config
 CONFIG_PATH_KEY=".claude-hooks/config.sh"
 
@@ -225,6 +244,7 @@ echo "  • ~/.claude-hooks/ (scripts, hooks, config.sh)"
 echo "  • ~/.claude-task-tracker/ (database, logs, config)"
 echo "  • Hooks configuration from settings.json files"
 echo "  • Legacy hooks.json files (if any)"
+echo "  • Slash commands (/hl-todo)"
 echo "  • Shell configuration entries"
 cecho "\n${YELLOW}Note:${NC} settings.json files were preserved with other settings intact."
 cecho "Please run ${YELLOW}source $RC_FILE${NC} to refresh your terminal session."
