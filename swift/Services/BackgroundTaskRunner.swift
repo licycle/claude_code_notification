@@ -41,14 +41,8 @@ class BackgroundTaskRunner {
             // Build the decompose prompt
             let prompt = self.buildDecomposePrompt(taskId: taskId, projects: projects)
 
-            // Find claude executable - try common locations
-            let homePath = FileManager.default.homeDirectoryForCurrentUser.path
-            let claudePaths = [
-                "\(homePath)/.nvm/versions/node/v24.11.0/bin/claude",
-                "\(homePath)/.local/bin/claude",
-                "/opt/homebrew/bin/claude",
-                "/usr/local/bin/claude"
-            ]
+            // Find claude executable using PathConstants
+            let claudePaths = PathConstants.claudeSearchPaths
 
             var claudePath: String? = nil
             for path in claudePaths {
@@ -81,19 +75,10 @@ class BackgroundTaskRunner {
             var env = ProcessInfo.processInfo.environment
 
             // Ensure PATH includes common locations (for tools claude might call)
-            let defaultPaths = [
-                "\(homePath)/.local/bin",
-                "\(homePath)/.nvm/versions/node/v24.11.0/bin",
-                "/opt/homebrew/bin",
-                "/usr/local/bin",
-                "/usr/bin",
-                "/bin",
-                "/usr/sbin",
-                "/sbin"
-            ].joined(separator: ":")
+            let defaultPaths = PathConstants.defaultPathEnv
             env["PATH"] = "\(defaultPaths):\(env["PATH"] ?? "")"
-            env["HOME"] = homePath
-            env["SHELL"] = "/bin/zsh"
+            env["HOME"] = PathConstants.home
+            env["SHELL"] = PathConstants.currentShell
             env["PWD"] = workingDir
 
             // Load API profile environment variables if specified
@@ -224,11 +209,8 @@ class BackgroundTaskRunner {
 
     /// Call session_init.py to create pending session before Claude starts
     private func callSessionInit(env: [String: String]) {
-        let hooksBase = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".claude-hooks")
-        let scriptPath = hooksBase
-            .appendingPathComponent("task_tracker")
-            .appendingPathComponent("hooks")
+        let hooksBaseURL = URL(fileURLWithPath: PathConstants.hooksBase)
+        let scriptPath = URL(fileURLWithPath: PathConstants.taskTrackerHooksDir)
             .appendingPathComponent("session_init.py")
 
         guard FileManager.default.fileExists(atPath: scriptPath.path) else {
@@ -238,13 +220,13 @@ class BackgroundTaskRunner {
 
         // Build environment with PYTHONPATH
         var scriptEnv = env
-        scriptEnv["PYTHONPATH"] = hooksBase.path
+        scriptEnv["PYTHONPATH"] = hooksBaseURL.path
 
         let initProcess = Process()
-        initProcess.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
+        initProcess.executableURL = URL(fileURLWithPath: PathConstants.findPython3())
         initProcess.arguments = [scriptPath.path]
         initProcess.environment = scriptEnv
-        initProcess.currentDirectoryURL = URL(fileURLWithPath: env["PWD"] ?? hooksBase.path)
+        initProcess.currentDirectoryURL = URL(fileURLWithPath: env["PWD"] ?? hooksBaseURL.path)
         initProcess.standardOutput = FileHandle.nullDevice
         initProcess.standardError = FileHandle.nullDevice
 
@@ -259,11 +241,8 @@ class BackgroundTaskRunner {
 
     /// Call session_cleanup.py to cleanup session after Claude exits
     private func callSessionCleanup(pendingId: String, env: [String: String]) {
-        let hooksBase = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".claude-hooks")
-        let scriptPath = hooksBase
-            .appendingPathComponent("task_tracker")
-            .appendingPathComponent("hooks")
+        let hooksBaseURL = URL(fileURLWithPath: PathConstants.hooksBase)
+        let scriptPath = URL(fileURLWithPath: PathConstants.taskTrackerHooksDir)
             .appendingPathComponent("session_cleanup.py")
 
         guard FileManager.default.fileExists(atPath: scriptPath.path) else {
@@ -273,10 +252,10 @@ class BackgroundTaskRunner {
 
         // Build environment with PYTHONPATH
         var scriptEnv = env
-        scriptEnv["PYTHONPATH"] = hooksBase.path
+        scriptEnv["PYTHONPATH"] = hooksBaseURL.path
 
         let cleanupProcess = Process()
-        cleanupProcess.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
+        cleanupProcess.executableURL = URL(fileURLWithPath: PathConstants.findPython3())
         cleanupProcess.arguments = [scriptPath.path, pendingId]
         cleanupProcess.environment = scriptEnv
         cleanupProcess.standardOutput = FileHandle.nullDevice
@@ -329,14 +308,6 @@ Description: \(task.description ?? "No description provided")
 ## Requirements
 - Each todo should be atomic and independently completable
 - Status should be "pending" for new todos
-
-## Example TodoWrite call:
-```
-TodoWrite with todos=[
-  {"content": "Implement user authentication in auth.py", "status": "pending", "activeForm": "Implementing user authentication"},
-  {"content": "Add unit tests for auth module", "status": "pending", "activeForm": "Adding unit tests"}
-]
-```
 
 IMPORTANT: You MUST use the TodoWrite tool to create the todo list.
 """
