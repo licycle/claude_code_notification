@@ -112,11 +112,15 @@ def create_pending_session(
     bundle_id: str = None,
     terminal_pid: int = None,
     shell_pid: int = None,
-    window_id: int = None
+    window_id: int = None,
+    global_task_id: int = None
 ) -> int:
     """
     Create a pending session before user submits first prompt.
     This allows the status bar to show 'idle' state immediately when Claude starts.
+
+    Args:
+        global_task_id: Optional global task ID for decompose sessions
 
     Returns:
         session_pk: The primary key (id) of the created session
@@ -137,10 +141,10 @@ def create_pending_session(
         cursor = conn.execute(
             """INSERT INTO sessions
                (session_id, pending_id, project, original_goal, current_status, created_at, last_activity,
-                account_alias, bundle_id, terminal_pid, shell_pid, window_id)
-               VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                account_alias, bundle_id, terminal_pid, shell_pid, window_id, global_task_id)
+               VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (pending_id, project, '等待输入...', 'idle', now, now,
-             account_alias, bundle_id, terminal_pid, shell_pid, window_id)
+             account_alias, bundle_id, terminal_pid, shell_pid, window_id, global_task_id)
         )
         session_pk = cursor.lastrowid
 

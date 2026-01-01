@@ -13,10 +13,17 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from utils import read_hook_input, write_hook_output, log, get_project_name, safe_json_parse
 from services.database import (
-    get_session, update_progress, add_pending_decision,
+    get_session, get_session_pk, update_progress, add_pending_decision,
     update_session_status, get_progress
 )
 from services.notification import notify_decision_needed
+
+# Import todo_service for global todos sync
+try:
+    from services.todo_service import create_todo, update_todo, list_todos
+    TODO_SERVICE_ENABLED = True
+except ImportError:
+    TODO_SERVICE_ENABLED = False
 
 
 def main():
@@ -90,7 +97,13 @@ def handle_todo_write(session_id: str, tool_input, project_name: str):
 
     log("PROGRESS", f"Found {len(todos)} todos")
 
-    # Update progress in database
+    # Log each todo for debugging
+    for i, todo in enumerate(todos):
+        content = todo.get('content', '')[:50]
+        status = todo.get('status', 'unknown')
+        log("PROGRESS", f"  Todo[{i}]: [{status}] {content}...")
+
+    # Update session progress in database (ephemeral, not global todos)
     update_progress(session_id, todos)
 
     # Count progress
@@ -99,6 +112,15 @@ def handle_todo_write(session_id: str, tool_input, project_name: str):
 
     log("PROGRESS", f"Progress: {completed}/{total}")
 
+    # Sync to global todos table if this is a decompose session
+    session = get_session(session_id)
+    if session:
+        global_task_id = session.get('global_task_id')
+        project_path = session.get('project', '')
+        if global_task_id and TODO_SERVICE_ENABLED:
+            log("PROGRESS", f"Syncing todos to global_task_id={global_task_id}")
+            sync_todos_to_global_table(todos, global_task_id, project_path)
+
     # Update session status based on todos
     in_progress = any(t.get('status') == 'in_progress' for t in todos)
     if in_progress:
@@ -106,9 +128,50 @@ def handle_todo_write(session_id: str, tool_input, project_name: str):
     elif completed == total and total > 0:
         # Only auto-complete if session is in 'working' status
         # Don't auto-complete idle or waiting sessions
-        session = get_session(session_id)
         if session and session['current_status'] == 'working':
             update_session_status(session_id, 'completed')
+
+
+def sync_todos_to_global_table(todos: list, global_task_id: int, project_path: str):
+    """Sync TodoWrite todos to global todos table"""
+    if not TODO_SERVICE_ENABLED:
+        return
+
+    try:
+        stored_count = 0
+        for todo_item in todos:
+            # Get title from 'content' (TodoWrite format) or 'title'
+            title = todo_item.get('content') or todo_item.get('title', '')
+            if not title:
+                continue
+
+            status = todo_item.get('status', 'pending')
+            # Only create new todos for pending items
+            if status != 'pending':
+                continue
+
+            # Create the todo
+            todo = create_todo(
+                project_path=project_path,
+                title=title,
+                description=todo_item.get('description', ''),
+                global_task_id=global_task_id,
+                priority=todo_item.get('priority', 0),
+                estimated_minutes=todo_item.get('estimated_minutes'),
+                metadata={'activeForm': todo_item.get('activeForm', '')},
+                actor='ai'
+            )
+
+            if todo:
+                stored_count += 1
+                log("PROGRESS", f"  Created global todo #{todo.id}: {title[:40]}...")
+
+        log("PROGRESS", f"Synced {stored_count} todos to global table")
+
+    except Exception as e:
+        log("PROGRESS_ERROR", f"Failed to sync todos to global table: {e}")
+        import traceback
+        log("PROGRESS_ERROR", traceback.format_exc())
 
 
 def handle_ask_user_question(session_id: str, tool_input, project_name: str):

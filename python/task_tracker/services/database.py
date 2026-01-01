@@ -36,7 +36,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     bundle_id TEXT,
     terminal_pid INTEGER,
     shell_pid INTEGER,
-    window_id INTEGER
+    window_id INTEGER,
+    global_task_id INTEGER        -- 关联全局任务 (用于 decompose)
 );
 
 -- Indexes

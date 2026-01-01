@@ -144,7 +144,8 @@ def cmd_task_create(args):
 
         result = decomposer.decompose(
             task_title=task.title,
-            task_description=args.desc or ''
+            task_description=args.desc or '',
+            global_task_id=task.id
         )
 
         # Show preview
@@ -155,33 +156,13 @@ def cmd_task_create(args):
 
         print(f"\nTotal estimated time: {result.total_estimated_hours} hours")
 
-        # Interactive mode
-        if getattr(args, 'interactive', False):
-            confirm = input("\nSave these todos? [Y/n]: ").strip().lower()
-            if confirm and confirm != 'y':
-                print("Todos not saved. Task created without decomposition.")
-                return
-
-        # Save todos
-        saved_ids = []
-        for todo_def in result.todos:
-            todo = create_todo(
-                project_path=todo_def.get('project_path', project_paths[0]),
-                title=todo_def['title'],
-                description=todo_def.get('description'),
-                global_task_id=task.id,
-                priority=todo_def.get('priority', 0),
-                estimated_minutes=todo_def.get('estimated_minutes'),
-                actor='ai'
-            )
-            saved_ids.append(todo.id)
-
-        print(f"\nCreated {len(saved_ids)} todos: {saved_ids}")
+        # Note: Todos are automatically stored by decompose() method
+        print(f"\nTodos have been stored to database.")
 
         if args.json:
             print_json({
                 'task': task.to_dict(),
-                'todos': [{'id': tid, **td} for tid, td in zip(saved_ids, result.todos)],
+                'todos': [td for td in result.todos],
                 'total_estimated_hours': result.total_estimated_hours
             })
 
@@ -566,7 +547,8 @@ def cmd_task_decompose(args):
 
         result = decomposer.decompose(
             task_title=task.title,
-            task_description=task.description or ''
+            task_description=task.description or '',
+            global_task_id=task.id
         )
 
         # Show preview
@@ -583,39 +565,14 @@ def cmd_task_decompose(args):
             print(f"  Type: {result.analysis.get('project_type', 'N/A')}")
             print(f"  Tech Stack: {', '.join(result.analysis.get('tech_stack', []))}")
 
-        # Interactive mode: allow user to review/edit
-        if getattr(args, 'interactive', False):
-            print("\n--- Interactive Mode ---")
-            print("Todos preview (edit not implemented yet)")
-            confirm = input("\nSave these todos? [Y/n]: ").strip().lower()
-            if confirm and confirm != 'y':
-                print("Cancelled")
-                return
-        else:
-            # Default: just show and save
-            pass
-
-        # Save to database
-        saved_ids = []
-        for todo_def in result.todos:
-            todo = create_todo(
-                project_path=todo_def.get('project_path', project_paths[0]),
-                title=todo_def['title'],
-                description=todo_def.get('description'),
-                global_task_id=task.id,
-                priority=todo_def.get('priority', 0),
-                estimated_minutes=todo_def.get('estimated_minutes'),
-                actor='ai'
-            )
-            saved_ids.append(todo.id)
-
-        print(f"\nCreated {len(saved_ids)} todos: {saved_ids}")
+        # Note: Todos are automatically stored by decompose() method
+        print(f"\nTodos have been stored to database.")
 
         if args.json:
             print_json({
                 'task_id': task.id,
                 'analysis': result.analysis,
-                'todos': [{'id': tid, **td} for tid, td in zip(saved_ids, result.todos)],
+                'todos': [td for td in result.todos],
                 'total_estimated_hours': result.total_estimated_hours
             })
 

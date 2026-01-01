@@ -38,6 +38,12 @@ def main():
     window_id = int(env_info.get('window_id', 0)) or None
     account_alias = env_info.get('account_alias', 'default')
 
+    # Get global_task_id for decompose sessions
+    global_task_id_str = os.environ.get('CLAUDE_DECOMPOSE_TASK_ID', '')
+    global_task_id = int(global_task_id_str) if global_task_id_str.isdigit() else None
+    if global_task_id:
+        log("SESSION_INIT", f"Decompose session for global_task_id={global_task_id}")
+
     # Clean up old active sessions for this shell before creating new one
     if shell_pid:
         cleaned = cleanup_active_sessions_by_shell_pid(shell_pid)
@@ -52,7 +58,8 @@ def main():
         bundle_id=bundle_id,
         terminal_pid=terminal_pid,
         shell_pid=shell_pid,
-        window_id=window_id
+        window_id=window_id,
+        global_task_id=global_task_id
     )
 
     log("SESSION_INIT", f"Pending session created: pending_{pending_id[:8]}...")

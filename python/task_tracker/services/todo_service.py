@@ -902,54 +902,47 @@ class SessionTodoLink:
 
 def get_linked_todos_for_session(session_pk: int) -> List[SessionTodoLink]:
     """Get all todo links for a session"""
-    conn = get_connection()
-    cursor = conn.cursor()
+    with get_connection() as conn:
+        cursor = conn.execute("""
+            SELECT id, session_pk, todo_id, started_at, ended_at, status, notes
+            FROM session_todo_links
+            WHERE session_pk = ?
+            ORDER BY started_at DESC
+        """, (session_pk,))
 
-    cursor.execute("""
-        SELECT id, session_pk, todo_id, started_at, ended_at, status, notes
-        FROM session_todo_links
-        WHERE session_pk = ?
-        ORDER BY started_at DESC
-    """, (session_pk,))
-
-    links = []
-    for row in cursor.fetchall():
-        links.append(SessionTodoLink(
-            id=row['id'],
-            session_pk=row['session_pk'],
-            todo_id=row['todo_id'],
-            started_at=_parse_datetime(row['started_at']) if row['started_at'] else None,
-            ended_at=_parse_datetime(row['ended_at']) if row['ended_at'] else None,
-            status=row['status'] or 'active',
-            notes=row['notes']
-        ))
-
-    conn.close()
-    return links
+        links = []
+        for row in cursor.fetchall():
+            links.append(SessionTodoLink(
+                id=row['id'],
+                session_pk=row['session_pk'],
+                todo_id=row['todo_id'],
+                started_at=_parse_datetime(row['started_at']) if row['started_at'] else None,
+                ended_at=_parse_datetime(row['ended_at']) if row['ended_at'] else None,
+                status=row['status'] or 'active',
+                notes=row['notes']
+            ))
+        return links
 
 
 def update_session_todo_link_status(link_id: int, status: str, notes: str = None) -> bool:
     """Update a session-todo link status"""
-    conn = get_connection()
-    cursor = conn.cursor()
+    with get_connection() as conn:
+        if status in ('completed', 'paused', 'cancelled'):
+            conn.execute("""
+                UPDATE session_todo_links
+                SET status = ?, ended_at = datetime('now'), notes = COALESCE(?, notes)
+                WHERE id = ?
+            """, (status, notes, link_id))
+        else:
+            conn.execute("""
+                UPDATE session_todo_links
+                SET status = ?, notes = COALESCE(?, notes)
+                WHERE id = ?
+            """, (status, notes, link_id))
 
-    if status in ('completed', 'paused', 'cancelled'):
-        cursor.execute("""
-            UPDATE session_todo_links
-            SET status = ?, ended_at = datetime('now'), notes = COALESCE(?, notes)
-            WHERE id = ?
-        """, (status, notes, link_id))
-    else:
-        cursor.execute("""
-            UPDATE session_todo_links
-            SET status = ?, notes = COALESCE(?, notes)
-            WHERE id = ?
-        """, (status, notes, link_id))
-
-    conn.commit()
-    success = cursor.rowcount > 0
-    conn.close()
-    return success
+        # Check if update was successful
+        cursor = conn.execute("SELECT changes()")
+        return cursor.fetchone()[0] > 0
 
 
 # Export all functions

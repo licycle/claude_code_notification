@@ -68,9 +68,10 @@ class BackgroundTaskRunner {
 
             log("BackgroundTaskRunner: Using claude at: \(execPath)")
 
-            // Call claude directly with -p flag
+            // Call claude directly with -p flag and allowed tools for decomposition
             process.executableURL = URL(fileURLWithPath: execPath)
-            process.arguments = ["-p", prompt]
+            let allowedTools = "Read,Glob,Grep,LS,WebSearch,WebFetch,TodoWrite"
+            process.arguments = ["-p", prompt, "--allowedTools", allowedTools, "--max-turns", "15"]
 
             // Set working directory to first project if available
             let workingDir = projects.first ?? FileManager.default.homeDirectoryForCurrentUser.path
@@ -124,6 +125,9 @@ class BackgroundTaskRunner {
             env["CLAUDE_TERM_PID"] = String(ProcessInfo.processInfo.processIdentifier)
             env["CLAUDE_SHELL_PID"] = String(ProcessInfo.processInfo.processIdentifier)
             env["CLAUDE_CG_WINDOW_ID"] = "0"
+
+            // Set global task ID for decompose session (used by progress_tracker.py)
+            env["CLAUDE_DECOMPOSE_TASK_ID"] = String(taskId)
 
             process.environment = env
             log("BackgroundTaskRunner: Environment configured, starting process...")
@@ -292,36 +296,49 @@ class BackgroundTaskRunner {
         // Get task info from database
         guard let task = TodoDatabaseManager.shared.getGlobalTask(id: taskId) else {
             log("BackgroundTaskRunner: Could not find task \(taskId), using default prompt")
-            return "Analyze project structure and suggest actionable todos."
+            return "Analyze project structure and suggest actionable todos using the TodoWrite tool."
         }
 
         let projectList = projects.map { "- \($0)" }.joined(separator: "\n")
 
+        // Use prompt that requires TodoWrite tool (not JSON output)
+        // This allows PostToolUse hook to automatically capture todos
         let prompt = """
-Analyze these projects and decompose the following task into actionable todos:
+You are an expert software engineer. Analyze the following project(s) and decompose the given task into actionable todos.
 
-Task: \(task.title)
+## Task
+Title: \(task.title)
 Description: \(task.description ?? "No description provided")
 
-Projects to analyze:
+## Project Paths
 \(projectList)
 
-Please:
-1. Analyze the project structure and codebase
-2. Break down the task into specific, actionable sub-tasks
-3. Return a JSON array of todos
+## Instructions
 
-Output format (JSON array):
-[
-  {
-    "title": "Brief task title",
-    "description": "Detailed description of what needs to be done",
-    "project_path": "/path/to/relevant/project",
-    "estimated_minutes": 30
-  }
+1. **Explore the codebase thoroughly:**
+   - Use Glob to find relevant files by pattern
+   - Use Grep to search for code patterns and keywords
+   - Use Read to examine key files in detail
+
+2. **Based on your analysis, use the TodoWrite tool** to create todos that:
+   - Are atomic and independently completable
+   - Start with action verbs (Implement, Add, Fix, Refactor, Test, Create, Update)
+   - Reference specific files or modules when possible
+   - Include both `content` (what to do) and `activeForm` (doing what) fields
+
+## Requirements
+- Each todo should be atomic and independently completable
+- Status should be "pending" for new todos
+
+## Example TodoWrite call:
+```
+TodoWrite with todos=[
+  {"content": "Implement user authentication in auth.py", "status": "pending", "activeForm": "Implementing user authentication"},
+  {"content": "Add unit tests for auth module", "status": "pending", "activeForm": "Adding unit tests"}
 ]
+```
 
-Return ONLY the JSON array, no other text.
+IMPORTANT: You MUST use the TodoWrite tool to create the todo list.
 """
         return prompt
     }
