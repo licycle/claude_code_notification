@@ -39,18 +39,47 @@ LOG_DIR = Path(os.environ.get('CLAUDE_LOG_DIR',
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 LOG_FILE = LOG_DIR / 'mcp_server.log'
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(LOG_FILE),
-        logging.StreamHandler()
-    ]
-)
+# Fallback log directory if primary is protected by macOS
+FALLBACK_LOG_DIR = Path('/tmp/claude/logs')
+FALLBACK_LOG_FILE = FALLBACK_LOG_DIR / 'mcp_server.log'
+
+
+def _setup_logging():
+    """Setup logging with fallback for protected directories"""
+    handlers = [logging.StreamHandler()]
+
+    # Try primary log file
+    try:
+        LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        # Test if we can write to the file
+        with open(LOG_FILE, 'a') as f:
+            pass
+        handlers.append(logging.FileHandler(LOG_FILE))
+    except (PermissionError, OSError):
+        # Fallback to /tmp/claude/logs
+        try:
+            FALLBACK_LOG_DIR.mkdir(parents=True, exist_ok=True)
+            handlers.append(logging.FileHandler(FALLBACK_LOG_FILE))
+            print(f"Warning: Using fallback log: {FALLBACK_LOG_FILE}", file=sys.stderr)
+        except (PermissionError, OSError):
+            # Only use stderr if all else fails
+            print("Warning: File logging disabled, using stderr only", file=sys.stderr)
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=handlers
+    )
+
+
+_setup_logging()
 logger = logging.getLogger('mcp_server')
 
 # PID file for daemon management
-PID_FILE = Path.home() / '.claude-task-tracker' / 'mcp_server.pid'
+# Use /tmp/claude/ to avoid macOS sandbox permission issues
+PID_DIR = Path('/tmp/claude')
+PID_DIR.mkdir(parents=True, exist_ok=True)
+PID_FILE = PID_DIR / 'mcp_server.pid'
 
 
 # ============================================================================
@@ -454,9 +483,12 @@ def write_pid_file():
 
 
 def remove_pid_file():
-    """Remove PID file"""
+    """Remove PID file with error handling for sandbox restrictions"""
     if PID_FILE.exists():
-        PID_FILE.unlink()
+        try:
+            PID_FILE.unlink()
+        except (PermissionError, OSError) as e:
+            logger.warning(f"Could not remove PID file: {e}")
 
 
 def get_server_pid() -> int:
