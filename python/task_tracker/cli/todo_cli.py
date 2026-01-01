@@ -148,22 +148,27 @@ def cmd_task_create(args):
             global_task_id=task.id
         )
 
+        # Query todos from database (synced via TodoWrite hook)
+        from time import sleep
+        sleep(0.5)  # Brief delay for hook to complete
+        todos = list_todos(global_task_id=task.id)
+
         # Show preview
-        print(f"\nGenerated {len(result.todos)} todos:")
-        for i, todo in enumerate(result.todos):
-            est = f"{todo.get('estimated_minutes', 60)}m"
-            print(f"  {i+1}. [{est}] {todo['title']}")
+        print(f"\nGenerated {len(todos)} todos:")
+        total_minutes = 0
+        for i, todo in enumerate(todos):
+            est = f"{todo.estimated_minutes or 60}m"
+            total_minutes += todo.estimated_minutes or 60
+            print(f"  {i+1}. [{est}] {todo.title}")
 
-        print(f"\nTotal estimated time: {result.total_estimated_hours} hours")
-
-        # Note: Todos are automatically stored by decompose() method
-        print(f"\nTodos have been stored to database.")
+        print(f"\nTotal estimated time: {round(total_minutes / 60, 1)} hours")
+        print(f"Todos stored to database.")
 
         if args.json:
             print_json({
                 'task': task.to_dict(),
-                'todos': [td for td in result.todos],
-                'total_estimated_hours': result.total_estimated_hours
+                'todos': [t.to_dict() for t in todos],
+                'total_estimated_hours': round(total_minutes / 60, 1)
             })
 
     except DecomposeError as e:
@@ -503,8 +508,6 @@ def cmd_task_decompose(args):
         ProjectNotFoundError,
         ClaudeNotFoundError,
         ClaudeTimeoutError,
-        OutputParseError,
-        ValidationError,
     )
 
     # Get task info
@@ -551,29 +554,27 @@ def cmd_task_decompose(args):
             global_task_id=task.id
         )
 
+        # Query todos from database (synced via TodoWrite hook)
+        from time import sleep
+        sleep(0.5)  # Brief delay for hook to complete
+        todos = list_todos(global_task_id=task.id)
+
         # Show preview
-        print(f"\nGenerated {len(result.todos)} todos:")
-        for i, todo in enumerate(result.todos):
-            est = f"{todo.get('estimated_minutes', 60)}m"
-            print(f"  {i+1}. [{est}] {todo['title']}")
+        print(f"\nGenerated {len(todos)} todos:")
+        total_minutes = 0
+        for i, todo in enumerate(todos):
+            est = f"{todo.estimated_minutes or 60}m"
+            total_minutes += todo.estimated_minutes or 60
+            print(f"  {i+1}. [{est}] {todo.title}")
 
-        print(f"\nTotal estimated time: {result.total_estimated_hours} hours")
-
-        # Show analysis if verbose
-        if result.analysis:
-            print(f"\nProject Analysis:")
-            print(f"  Type: {result.analysis.get('project_type', 'N/A')}")
-            print(f"  Tech Stack: {', '.join(result.analysis.get('tech_stack', []))}")
-
-        # Note: Todos are automatically stored by decompose() method
-        print(f"\nTodos have been stored to database.")
+        print(f"\nTotal estimated time: {round(total_minutes / 60, 1)} hours")
+        print(f"Todos stored to database.")
 
         if args.json:
             print_json({
                 'task_id': task.id,
-                'analysis': result.analysis,
-                'todos': [td for td in result.todos],
-                'total_estimated_hours': result.total_estimated_hours
+                'todos': [t.to_dict() for t in todos],
+                'total_estimated_hours': round(total_minutes / 60, 1)
             })
 
     except ProjectNotFoundError as e:
@@ -585,12 +586,6 @@ def cmd_task_decompose(args):
         sys.exit(1)
     except ClaudeTimeoutError as e:
         print(f"Error: {e}")
-        sys.exit(1)
-    except OutputParseError as e:
-        print(f"Error parsing Claude output: {e}")
-        sys.exit(1)
-    except ValidationError as e:
-        print(f"Validation error: {e}")
         sys.exit(1)
     except DecomposeError as e:
         print(f"Decomposition failed: {e}")

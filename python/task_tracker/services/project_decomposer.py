@@ -8,7 +8,6 @@ Replaces the complex workflow engine approach.
 import subprocess
 import json
 import os
-import re
 from dataclasses import dataclass, field
 from typing import Optional, Dict, Any, List
 from pathlib import Path
@@ -56,16 +55,6 @@ class ClaudeNotFoundError(DecomposeError):
 
 class ClaudeTimeoutError(DecomposeError):
     """Claude CLI timed out"""
-    pass
-
-
-class OutputParseError(DecomposeError):
-    """Could not parse Claude output as JSON"""
-    pass
-
-
-class ValidationError(DecomposeError):
-    """Generated todos failed validation"""
     pass
 
 
@@ -270,124 +259,6 @@ class ProjectDecomposer:
         log("DECOMPOSE", f"Decomposition complete. Todos synced via PostToolUse hook.")
         return result
 
-    def _extract_todos_from_transcript(self) -> List[Dict]:
-        """
-        DEPRECATED: This method is no longer used.
-        Todos are now automatically synced via PostToolUse hook in progress_tracker.py
-        when Claude calls TodoWrite tool.
-
-        Kept for reference/backward compatibility.
-        """
-        try:
-            # Find transcript directory
-            config_dir = Path.home() / '.claude'
-            projects_dir = config_dir / 'projects'
-
-            if not projects_dir.exists():
-                log("DECOMPOSE", "No projects directory found")
-                return []
-
-            # Find the most recent transcript for this project
-            project_path = self.project_paths[0]
-            # Claude uses a hash of the project path as directory name
-            project_hash = project_path.replace('/', '-').replace('\\', '-')
-            if project_hash.startswith('-'):
-                project_hash = project_hash[1:]
-
-            project_dir = projects_dir / project_hash
-            if not project_dir.exists():
-                log("DECOMPOSE", f"Project transcript dir not found: {project_dir}")
-                return []
-
-            # Find most recent .jsonl file
-            jsonl_files = list(project_dir.glob('*.jsonl'))
-            if not jsonl_files:
-                log("DECOMPOSE", "No transcript files found")
-                return []
-
-            # Sort by modification time, get most recent
-            latest_transcript = max(jsonl_files, key=lambda f: f.stat().st_mtime)
-            log("DECOMPOSE", f"Reading transcript: {latest_transcript.name}")
-
-            # Parse transcript and extract TodoWrite calls
-            todos = []
-            with open(latest_transcript, 'r', encoding='utf-8') as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        event = json.loads(line)
-                        # Check for TodoWrite tool calls
-                        if event.get('tool_name') == 'TodoWrite':
-                            tool_input = event.get('tool_input', {})
-                            if isinstance(tool_input, str):
-                                tool_input = json.loads(tool_input)
-                            todo_list = tool_input.get('todos', [])
-                            if todo_list:
-                                todos = todo_list  # Use the last TodoWrite call
-                    except json.JSONDecodeError:
-                        continue
-
-            log("DECOMPOSE", f"Extracted {len(todos)} todos from transcript")
-            return todos
-
-        except Exception as e:
-            log("DECOMPOSE", f"Failed to extract todos from transcript: {e}")
-            return []
-
-    def _store_todos_to_db(self, todos: List[Dict], global_task_id: int = None) -> List[int]:
-        """
-        DEPRECATED: This method is no longer used.
-        Todos are now automatically synced via PostToolUse hook in progress_tracker.py
-        when Claude calls TodoWrite tool.
-
-        Kept for reference/backward compatibility.
-        """
-        try:
-            from task_tracker.services.todo_service import create_todo, update_todo
-
-            project_path = self.project_paths[0]
-            stored_ids = []
-
-            for todo_item in todos:
-                # Handle both formats: 'content' (TodoWrite) and 'title' (JSON)
-                title = todo_item.get('content') or todo_item.get('title', '')
-                if not title:
-                    continue
-
-                description = todo_item.get('description', '')
-                priority = todo_item.get('priority', 0)
-                estimated_minutes = todo_item.get('estimated_minutes')
-                status = todo_item.get('status', 'pending')
-
-                # Create todo
-                todo = create_todo(
-                    project_path=project_path,
-                    title=title,
-                    description=description,
-                    global_task_id=global_task_id,
-                    priority=priority,
-                    estimated_minutes=estimated_minutes,
-                    metadata={'activeForm': todo_item.get('activeForm', '')},
-                    actor='ai'
-                )
-
-                if todo:
-                    # Update status if not pending
-                    if status != 'pending':
-                        update_todo(todo.id, status=status, actor='ai')
-                    stored_ids.append(todo.id)
-                    log("DECOMPOSE", f"  Created todo #{todo.id}: {title[:40]}...")
-
-            return stored_ids
-
-        except Exception as e:
-            log("DECOMPOSE", f"Failed to store todos: {e}")
-            import traceback
-            log("DECOMPOSE", traceback.format_exc())
-            return []
-
     def _cleanup_idle_sessions(self) -> None:
         """
         Mark idle sessions for this project as completed.
@@ -413,7 +284,6 @@ class ProjectDecomposer:
                 rows = cursor.fetchall()
                 for row in rows:
                     session_pk = row['id']
-                    session_id = row['session_id']
 
                     # Update status to completed
                     conn.execute("""
@@ -539,94 +409,16 @@ class ProjectDecomposer:
             raise ClaudeTimeoutError(f"Claude CLI timed out after {self.timeout}s")
 
     def _parse_result(self, output: str) -> DecomposeResult:
-        """Parse Claude output - now tolerant since todos are synced via TodoWrite hook"""
-        log("DECOMPOSE", "Parsing output...")
-
-        # Try to extract JSON if present (for backward compatibility)
-        data = None
-
-        # Strategy 1: JSON in markdown code block
-        json_block_match = re.search(r'```json\s*([\s\S]*?)\s*```', output)
-        if json_block_match:
-            try:
-                data = json.loads(json_block_match.group(1))
-                log("DECOMPOSE", "  Found JSON in code block")
-            except json.JSONDecodeError:
-                pass
-
-        # Strategy 2: Generic code block
-        if data is None:
-            code_block_match = re.search(r'```\s*([\s\S]*?)\s*```', output)
-            if code_block_match:
-                try:
-                    data = json.loads(code_block_match.group(1))
-                    log("DECOMPOSE", "  Found JSON in generic block")
-                except json.JSONDecodeError:
-                    pass
-
-        # Strategy 3: Find outermost { } pair
-        if data is None:
-            brace_count = 0
-            start_idx = -1
-            end_idx = -1
-            for i, char in enumerate(output):
-                if char == '{':
-                    if brace_count == 0:
-                        start_idx = i
-                    brace_count += 1
-                elif char == '}':
-                    brace_count -= 1
-                    if brace_count == 0 and start_idx >= 0:
-                        end_idx = i + 1
-                        break
-
-            if start_idx >= 0 and end_idx > start_idx:
-                try:
-                    data = json.loads(output[start_idx:end_idx])
-                    log("DECOMPOSE", "  Found bare JSON")
-                except json.JSONDecodeError:
-                    pass
-
-        # If no JSON found, that's OK - todos are synced via TodoWrite hook
-        if data is None:
-            log("DECOMPOSE", "  No JSON found - todos synced via TodoWrite hook")
-            return DecomposeResult(
-                analysis={'note': 'Todos synced via TodoWrite hook'},
-                todos=[],
-                total_estimated_minutes=0
-            )
-
-        # Build result from JSON if found
-        todos = data.get('todos', [])
-        analysis = data.get('analysis', {})
-        total_minutes = data.get('total_estimated_minutes', 0)
-
-        if not total_minutes and todos:
-            total_minutes = sum(t.get('estimated_minutes', 60) for t in todos)
-
-        log("DECOMPOSE", f"  Parsed: {len(todos)} todos, {total_minutes} minutes")
-
+        """
+        Return empty result - todos are synced via TodoWrite hook.
+        Use list_todos(global_task_id=X) to get todos from database.
+        """
+        log("DECOMPOSE", "Todos synced via TodoWrite hook - query database for results")
         return DecomposeResult(
-            analysis=analysis,
-            todos=todos,
-            total_estimated_minutes=total_minutes
+            analysis={'note': 'Todos synced via TodoWrite hook. Query database for results.'},
+            todos=[],
+            total_estimated_minutes=0
         )
-
-    def _validate_todos(self, todos: List[Dict]) -> None:
-        """Validate todos - now optional since todos may be synced via hook"""
-        # If no todos from JSON, that's OK - they may have been synced via TodoWrite hook
-        if not todos:
-            log("DECOMPOSE", "No todos from JSON output - check hooks.log for TodoWrite sync")
-            return
-
-        for i, todo in enumerate(todos):
-            if not todo.get('title'):
-                log("DECOMPOSE", f"Todo {i} missing title, skipping validation")
-                continue
-
-            # Set default project_path if not specified
-            if not todo.get('project_path'):
-                todo['project_path'] = self.project_paths[0]
 
 
 # ============================================================================

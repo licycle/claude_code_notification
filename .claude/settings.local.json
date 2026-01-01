@@ -84,7 +84,11 @@
       "Bash(./scripts/lib/swift_build.sh:*)",
       "Bash(pkill:*)",
       "Bash(PYTHONPATH=./python python3:*)",
-      "WebFetch(domain:api.anthropic.com)"
+      "WebFetch(domain:api.anthropic.com)",
+      "WebFetch(domain:statsig.anthropic.com)",
+      "WebFetch(domain:o1158394.ingest.us.sentry.io)",
+      "WebFetch(domain:mcp.deepwiki.com)",
+      "WebFetch(domain:mcp.context7.com)"
     ]
   },
   "sandbox": {
