@@ -31,6 +31,47 @@ class APIProfileManager {
         return cachedProfiles ?? []
     }
 
+    /// Get environment variables for a specific profile
+    /// - Parameter name: Profile name
+    /// - Returns: Dictionary of environment variables, nil if profile not found
+    func getProfileEnv(name: String) -> [String: String]? {
+        guard FileManager.default.fileExists(atPath: profilesPath.path) else {
+            log("APIProfileManager: profiles file not found")
+            return nil
+        }
+
+        do {
+            let data = try Data(contentsOf: profilesPath)
+            guard let profiles = try JSONSerialization.jsonObject(with: data) as? [String: [String: Any]] else {
+                log("APIProfileManager: invalid JSON format")
+                return nil
+            }
+
+            guard let config = profiles[name] else {
+                log("APIProfileManager: profile '\(name)' not found")
+                return nil
+            }
+
+            // Convert all values to strings
+            var env: [String: String] = [:]
+            for (key, value) in config {
+                if let stringValue = value as? String {
+                    env[key] = stringValue
+                } else if let intValue = value as? Int {
+                    env[key] = String(intValue)
+                } else if let boolValue = value as? Bool {
+                    env[key] = boolValue ? "1" : "0"
+                }
+            }
+
+            log("APIProfileManager: loaded profile '\(name)' with \(env.count) env vars")
+            return env
+        } catch {
+            log("APIProfileManager: failed to read profiles: \(error)")
+            return nil
+        }
+    }
+
     /// Refresh the profile cache
     func refresh() {
         cachedProfiles = nil
