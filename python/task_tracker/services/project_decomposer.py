@@ -13,6 +13,7 @@ from typing import Optional, Dict, Any, List
 from pathlib import Path
 
 from task_tracker.hooks.utils import log
+from task_tracker.services.db_pending import create_pending_session
 
 
 # ============================================================================
@@ -348,6 +349,20 @@ class ProjectDecomposer:
             if hasattr(self, 'global_task_id') and self.global_task_id:
                 env['CLAUDE_DECOMPOSE_TASK_ID'] = str(self.global_task_id)
                 log("DECOMPOSE", f"  Global task ID: {self.global_task_id}")
+
+            # Create pending session BEFORE calling claude (like shell wrapper does)
+            # This ensures session has global_task_id for TodoWrite hook to sync todos
+            create_pending_session(
+                pending_id=pending_id,
+                project=self.project_paths[0],
+                account_alias=self.account_alias,
+                bundle_id='com.claude.decomposer',
+                terminal_pid=os.getpid(),
+                shell_pid=os.getpid(),
+                window_id=0,
+                global_task_id=self.global_task_id if hasattr(self, 'global_task_id') else None
+            )
+            log("DECOMPOSE", f"  Created pending session: {pending_id[:8]}...")
 
             # Load API profile if specified
             if self.api_profile:
