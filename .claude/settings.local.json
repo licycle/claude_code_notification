@@ -88,9 +88,15 @@
       "WebFetch(domain:statsig.anthropic.com)",
       "WebFetch(domain:o1158394.ingest.us.sentry.io)",
       "WebFetch(domain:mcp.deepwiki.com)",
-      "WebFetch(domain:mcp.context7.com)"
+      "WebFetch(domain:mcp.context7.com)",
+      "mcp__claude-todo__list_todos",
+      "Bash(kill:*)"
     ]
   },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "claude-todo"
+  ],
   "sandbox": {
     "enabled": true,
     "autoAllowBashIfSandboxed": true

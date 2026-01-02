@@ -21,8 +21,25 @@ from ..services.todo_service import (
 
 
 def _get_current_project() -> str:
-    """Get current project path from environment or cwd"""
-    return os.environ.get('CLAUDE_PROJECT_DIR', os.getcwd())
+    """Get current project path from environment or cwd
+
+    Priority:
+    1. CLAUDE_PROJECT_DIR - explicitly set by Claude Code
+    2. PWD - user's shell current directory (more reliable than cwd for MCP)
+    3. os.getcwd() - fallback
+    """
+    # First try explicit Claude project dir
+    project_dir = os.environ.get('CLAUDE_PROJECT_DIR')
+    if project_dir:
+        return project_dir
+
+    # Try PWD (user's shell directory, not MCP server's cwd)
+    pwd = os.environ.get('PWD')
+    if pwd:
+        return pwd
+
+    # Fallback to cwd
+    return os.getcwd()
 
 
 def _get_session_pk() -> Optional[int]:

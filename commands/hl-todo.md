@@ -16,10 +16,12 @@ Load and execute todos for the current project.
 
 ## Instructions
 
+**IMPORTANT**: When calling MCP tools, you MUST pass the current working directory as `project_path` parameter. The current working directory is available in the environment and shown in your context.
+
 First, use the MCP tool `list_todos` to get all pending todos for the current project:
 
 ```
-Use the list_todos MCP tool to get todos for this project.
+Use the list_todos MCP tool with project_path set to the current working directory.
 ```
 
 Then, based on the user's request:

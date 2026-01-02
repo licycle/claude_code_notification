@@ -74,7 +74,7 @@ PYEOF
 {
   "mcpServers": {
     "claude-todo": {
-      "transport": "http",
+      "type": "http",
       "url": "http://127.0.0.1:8765/mcp"
     }
   }
@@ -228,7 +228,7 @@ if "mcpServers" not in config:
     config["mcpServers"] = {}
 
 config["mcpServers"]["claude-todo"] = {
-    "transport": "http",
+    "type": "http",
     "url": "http://127.0.0.1:8765/mcp"
 }
 
@@ -242,7 +242,7 @@ else
 {
   "mcpServers": {
     "claude-todo": {
-      "transport": "http",
+      "type": "http",
       "url": "http://127.0.0.1:8765/mcp"
     }
   }
