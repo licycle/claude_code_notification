@@ -38,8 +38,9 @@ class BackgroundTaskRunner {
 
             let process = Process()
 
-            // Build the decompose prompt
-            let prompt = self.buildDecomposePrompt(taskId: taskId, projects: projects)
+            // Build the decompose prompt using shared config
+            let taskTitle = self.getTaskTitle(taskId: taskId)
+            let prompt = DecomposeConfig.shared.buildPrompt(taskTitle: taskTitle, projectPaths: projects)
 
             // Find claude executable using PathConstants
             let claudePaths = PathConstants.claudeSearchPaths
@@ -62,10 +63,9 @@ class BackgroundTaskRunner {
 
             log("BackgroundTaskRunner: Using claude at: \(execPath)")
 
-            // Call claude directly with -p flag and allowed tools for decomposition
+            // Call claude directly with -p flag and allowed tools from shared config
             process.executableURL = URL(fileURLWithPath: execPath)
-            let allowedTools = "Read,Glob,Grep,LS,WebSearch,WebFetch,TodoWrite"
-            process.arguments = ["-p", prompt, "--allowedTools", allowedTools, "--max-turns", "15"]
+            process.arguments = ["-p", prompt, "--allowedTools", DecomposeConfig.shared.allowedToolsString]
 
             // Set working directory to first project if available
             let workingDir = projects.first ?? FileManager.default.homeDirectoryForCurrentUser.path
@@ -270,47 +270,12 @@ class BackgroundTaskRunner {
         }
     }
 
-    /// Build the decompose prompt for Claude CLI
-    private func buildDecomposePrompt(taskId: Int, projects: [String]) -> String {
-        // Get task info from database
+    /// Get task title from database
+    private func getTaskTitle(taskId: Int) -> String {
         guard let task = TodoDatabaseManager.shared.getGlobalTask(id: taskId) else {
-            log("BackgroundTaskRunner: Could not find task \(taskId), using default prompt")
-            return "Analyze project structure and suggest actionable todos using the TodoWrite tool."
+            log("BackgroundTaskRunner: Could not find task \(taskId)")
+            return "Analyze project and create todos"
         }
-
-        let projectList = projects.map { "- \($0)" }.joined(separator: "\n")
-
-        // Use prompt that requires TodoWrite tool (not JSON output)
-        // This allows PostToolUse hook to automatically capture todos
-        let prompt = """
-You are an expert software engineer. Analyze the following project(s) and decompose the given task into actionable todos.
-
-## Task
-Title: \(task.title)
-Description: \(task.description ?? "No description provided")
-
-## Project Paths
-\(projectList)
-
-## Instructions
-
-1. **Explore the codebase thoroughly:**
-   - Use Glob to find relevant files by pattern
-   - Use Grep to search for code patterns and keywords
-   - Use Read to examine key files in detail
-
-2. **Based on your analysis, use the TodoWrite tool** to create todos that:
-   - Are atomic and independently completable
-   - Start with action verbs (Implement, Add, Fix, Refactor, Test, Create, Update)
-   - Reference specific files or modules when possible
-   - Include both `content` (what to do) and `activeForm` (doing what) fields
-
-## Requirements
-- Each todo should be atomic and independently completable
-- Status should be "pending" for new todos
-
-IMPORTANT: You MUST use the TodoWrite tool to create the todo list.
-"""
-        return prompt
+        return task.title
     }
 }

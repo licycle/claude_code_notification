@@ -1,0 +1,12 @@
+{
+  "allowed_tools": [
+    "Task",
+    "Read",
+    "Glob",
+    "Grep",
+    "LS",
+    "WebSearch",
+    "WebFetch",
+    "TodoWrite"
+  ]
+}

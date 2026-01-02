@@ -30,6 +30,7 @@ class TodoListView: NSView {
         tv.backgroundColor = .clear
         tv.style = .plain
         tv.selectionHighlightStyle = .regular
+        tv.allowsMultipleSelection = true
         tv.rowHeight = 44
         tv.intercellSpacing = NSSize(width: 0, height: 1)
         tv.headerView = nil
@@ -89,6 +90,51 @@ class TodoListView: NSView {
         return button
     }()
 
+    // MARK: - Batch Operation UI Components
+
+    private lazy var batchToolbar: NSStackView = {
+        let stack = NSStackView()
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        stack.orientation = .horizontal
+        stack.spacing = 8
+        stack.alignment = .centerY
+        stack.isHidden = true
+        return stack
+    }()
+
+    private lazy var selectedCountLabel: NSTextField = {
+        let label = NSTextField(labelWithString: "")
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.font = .systemFont(ofSize: 12, weight: .medium)
+        label.textColor = .secondaryLabelColor
+        return label
+    }()
+
+    private lazy var batchCompleteButton: NSButton = {
+        let button = NSButton(title: "✓ " + L(.todo_batch_complete), target: self, action: #selector(batchMarkCompleteClicked))
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.bezelStyle = .rounded
+        button.font = .systemFont(ofSize: 12)
+        return button
+    }()
+
+    private lazy var batchPendingButton: NSButton = {
+        let button = NSButton(title: "○ " + L(.todo_batch_pending), target: self, action: #selector(batchMarkPendingClicked))
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.bezelStyle = .rounded
+        button.font = .systemFont(ofSize: 12)
+        return button
+    }()
+
+    private lazy var batchDeleteButton: NSButton = {
+        let button = NSButton(title: "🗑 " + L(.todo_batch_delete), target: self, action: #selector(batchDeleteClicked))
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.bezelStyle = .rounded
+        button.font = .systemFont(ofSize: 12)
+        button.contentTintColor = .systemRed
+        return button
+    }()
+
     // MARK: - Initialization
 
     override init(frame frameRect: NSRect) {
@@ -119,10 +165,17 @@ class TodoListView: NSView {
 
         scrollView.documentView = tableView
 
+        // Setup batch toolbar
+        batchToolbar.addArrangedSubview(selectedCountLabel)
+        batchToolbar.addArrangedSubview(batchCompleteButton)
+        batchToolbar.addArrangedSubview(batchPendingButton)
+        batchToolbar.addArrangedSubview(batchDeleteButton)
+
         addSubview(filterSegment)
         addSubview(createButton)
         addSubview(refreshButton)
         addSubview(statsLabel)
+        addSubview(batchToolbar)
         addSubview(scrollView)
         addSubview(emptyLabel)
 
@@ -143,7 +196,13 @@ class TodoListView: NSView {
             statsLabel.centerYAnchor.constraint(equalTo: createButton.centerYAnchor),
             statsLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
 
-            scrollView.topAnchor.constraint(equalTo: createButton.bottomAnchor, constant: 8),
+            // Batch toolbar below filter row
+            batchToolbar.topAnchor.constraint(equalTo: createButton.bottomAnchor, constant: 8),
+            batchToolbar.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            batchToolbar.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -8),
+            batchToolbar.heightAnchor.constraint(equalToConstant: 28),
+
+            scrollView.topAnchor.constraint(equalTo: batchToolbar.bottomAnchor, constant: 4),
             scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
             scrollView.bottomAnchor.constraint(equalTo: bottomAnchor),
@@ -199,7 +258,12 @@ class TodoListView: NSView {
         filterSegment.setLabel(L(.filter_working), forSegment: 2)
         filterSegment.setLabel(L(.filter_completed), forSegment: 3)
         emptyLabel.stringValue = L(.session_list_empty)
+        // Update batch toolbar buttons
+        batchCompleteButton.title = "✓ " + L(.todo_batch_complete)
+        batchPendingButton.title = "○ " + L(.todo_batch_pending)
+        batchDeleteButton.title = "🗑 " + L(.todo_batch_delete)
         updateStatsLabel()
+        updateBatchToolbar()
     }
 
     // MARK: - Data Loading
@@ -241,6 +305,26 @@ class TodoListView: NSView {
         let completed = todos.filter { $0.isCompleted }.count
 
         statsLabel.stringValue = "\(pending) pending · \(inProgress) active · \(completed) done"
+    }
+
+    // MARK: - Batch Toolbar
+
+    private func updateBatchToolbar() {
+        let selectedCount = tableView.selectedRowIndexes.count
+        if selectedCount > 1 {
+            batchToolbar.isHidden = false
+            let format = L(.todo_selected_count)
+            selectedCountLabel.stringValue = String(format: format, selectedCount)
+        } else {
+            batchToolbar.isHidden = true
+        }
+    }
+
+    private func getSelectedTodoIds() -> [Int] {
+        return tableView.selectedRowIndexes.compactMap { row in
+            guard row < todos.count else { return nil }
+            return todos[row].id
+        }
     }
 
     // MARK: - Context Menu
@@ -353,6 +437,62 @@ class TodoListView: NSView {
         loadData()
     }
 
+    // MARK: - Batch Actions
+
+    @objc private func batchMarkCompleteClicked() {
+        let ids = getSelectedTodoIds()
+        guard !ids.isEmpty else { return }
+
+        let alert = NSAlert()
+        alert.messageText = L(.todo_batch_confirm_title)
+        alert.informativeText = String(format: L(.todo_batch_confirm_message), ids.count)
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: L(.todo_batch_complete))
+        alert.addButton(withTitle: L(.cancel))
+
+        if alert.runModal() == .alertFirstButtonReturn {
+            let updated = todoDbManager.updateTodosStatus(ids: ids, status: "completed")
+            log("TodoListView: Batch marked \(updated) todos as completed")
+            loadData()
+        }
+    }
+
+    @objc private func batchMarkPendingClicked() {
+        let ids = getSelectedTodoIds()
+        guard !ids.isEmpty else { return }
+
+        let alert = NSAlert()
+        alert.messageText = L(.todo_batch_confirm_title)
+        alert.informativeText = String(format: L(.todo_batch_confirm_message), ids.count)
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: L(.todo_batch_pending))
+        alert.addButton(withTitle: L(.cancel))
+
+        if alert.runModal() == .alertFirstButtonReturn {
+            let updated = todoDbManager.updateTodosStatus(ids: ids, status: "pending")
+            log("TodoListView: Batch marked \(updated) todos as pending")
+            loadData()
+        }
+    }
+
+    @objc private func batchDeleteClicked() {
+        let ids = getSelectedTodoIds()
+        guard !ids.isEmpty else { return }
+
+        let alert = NSAlert()
+        alert.messageText = L(.todo_batch_confirm_title)
+        alert.informativeText = String(format: L(.todo_batch_confirm_message), ids.count)
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: L(.todo_batch_delete))
+        alert.addButton(withTitle: L(.cancel))
+
+        if alert.runModal() == .alertFirstButtonReturn {
+            let deleted = todoDbManager.deleteTodos(ids: ids)
+            log("TodoListView: Batch deleted \(deleted) todos")
+            loadData()
+        }
+    }
+
     // MARK: - Filter Types
 
     enum TodoFilter {
@@ -391,16 +531,19 @@ extension TodoListView: NSTableViewDelegate, NSTableViewDataSource {
     }
 
     func tableViewSelectionDidChange(_ notification: Notification) {
-        let row = tableView.selectedRow
-        guard row >= 0 && row < todos.count else { return }
+        // Update batch toolbar visibility
+        updateBatchToolbar()
 
-        let todo = todos[row]
-        // Post notification to show detail
-        NotificationCenter.default.post(
-            name: NSNotification.Name("ShowTodoDetail"),
-            object: nil,
-            userInfo: ["todoId": todo.id]
-        )
+        // Only post detail notification for single selection
+        let selectedRows = tableView.selectedRowIndexes
+        if selectedRows.count == 1, let row = selectedRows.first, row < todos.count {
+            let todo = todos[row]
+            NotificationCenter.default.post(
+                name: NSNotification.Name("ShowTodoDetail"),
+                object: nil,
+                userInfo: ["todoId": todo.id]
+            )
+        }
     }
 }
 

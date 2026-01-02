@@ -14,6 +14,10 @@ from pathlib import Path
 
 from task_tracker.hooks.utils import log
 from task_tracker.services.db_pending import create_pending_session
+from task_tracker.services.decompose_config import (
+    build_prompt,
+    get_allowed_tools_string,
+)
 
 
 # ============================================================================
@@ -118,53 +122,6 @@ def list_api_profiles() -> List[str]:
 
 
 # ============================================================================
-# Prompt Template
-# ============================================================================
-
-DECOMPOSE_PROMPT = """You are an expert software engineer. Analyze the following project(s) and decompose the given task into actionable todos.
-
-## Task
-Title: {task_title}
-Description: {task_description}
-
-## Project Paths
-{project_paths_list}
-
-## Instructions
-
-1. **Explore the codebase thoroughly:**
-   - For complex exploration, use the Task tool with subagent_type="Explore" to efficiently search the codebase
-   - Use Glob to find relevant files by pattern
-   - Use Grep to search for code patterns and keywords
-   - Use Read to examine key files in detail
-   - Use LS to understand directory structure
-   - Use WebSearch/WebFetch if you need to look up documentation
-
-2. **Based on your analysis, use the TodoWrite tool** to create todos that:
-   - Are atomic and independently completable
-   - Start with action verbs (Implement, Add, Fix, Refactor, Test, Create, Update)
-   - Reference specific files or modules
-   - Include both `content` (what to do) and `activeForm` (doing what) fields
-
-## Requirements
-- Each todo should be atomic and independently completable
-- Use action verbs: Implement, Add, Fix, Refactor, Test, Create, Update
-- Include specific file/module references when possible
-- Status should be "pending" for new todos
-
-## Example TodoWrite call:
-```
-TodoWrite with todos=[
-  {{"content": "Implement user authentication in auth.py", "status": "pending", "activeForm": "Implementing user authentication"}},
-  {{"content": "Add unit tests for auth module", "status": "pending", "activeForm": "Adding unit tests"}}
-]
-```
-
-IMPORTANT: You MUST use the TodoWrite tool to create the todo list.
-"""
-
-
-# ============================================================================
 # Project Decomposer
 # ============================================================================
 
@@ -177,7 +134,7 @@ class ProjectDecomposer:
             project_paths=["/path/to/project"],
             api_profile="kimi"  # Optional
         )
-        result = decomposer.decompose("Task title", "Task description")
+        result = decomposer.decompose("Task title")
         print(result.todos)
     """
 
@@ -186,14 +143,12 @@ class ProjectDecomposer:
         project_paths: List[str],
         api_profile: str = None,
         account_alias: str = None,
-        timeout: int = 300,
-        max_turns: int = 15
+        timeout: int = 300
     ):
         self.project_paths = [str(Path(p).resolve()) for p in project_paths]
         self.api_profile = api_profile
         self.account_alias = account_alias or 'default'
         self.timeout = timeout
-        self.max_turns = max_turns
 
         # Log initialization
         log("DECOMPOSE", f"ProjectDecomposer initialized")
@@ -210,7 +165,6 @@ class ProjectDecomposer:
     def decompose(
         self,
         task_title: str,
-        task_description: str = "",
         global_task_id: int = None
     ) -> DecomposeResult:
         """
@@ -222,7 +176,6 @@ class ProjectDecomposer:
 
         Args:
             task_title: Title of the task to decompose
-            task_description: Optional description of the task
             global_task_id: Optional global task ID to link todos to
 
         Returns:
@@ -245,7 +198,7 @@ class ProjectDecomposer:
         self.validate_projects()
 
         # Build prompt
-        prompt = self._build_prompt(task_title, task_description)
+        prompt = self._build_prompt(task_title)
 
         # Execute Claude CLI (hooks will automatically handle TodoWrite)
         raw_output = self._execute_claude(prompt)
@@ -305,15 +258,9 @@ class ProjectDecomposer:
             # Silently ignore cleanup errors - not critical
             pass
 
-    def _build_prompt(self, task_title: str, task_description: str) -> str:
+    def _build_prompt(self, task_title: str) -> str:
         """Build comprehensive analysis + todo generation prompt"""
-        project_paths_list = "\n".join(f"- {p}" for p in self.project_paths)
-
-        return DECOMPOSE_PROMPT.format(
-            task_title=task_title,
-            task_description=task_description or "(No description provided)",
-            project_paths_list=project_paths_list
-        )
+        return build_prompt(task_title, self.project_paths)
 
     def _execute_claude(self, prompt: str) -> str:
         """Execute Claude CLI directly with environment variables"""
@@ -371,23 +318,11 @@ class ProjectDecomposer:
                     env.update(profile)
                     log("DECOMPOSE", f"  API profile loaded: {list(profile.keys())}")
 
-            # Build command args
-            # All non-code-modifying tools for exploration + TodoWrite for output
-            allowed_tools = ','.join([
-                'Task',       # Explore subagent for deep search
-                'Read',       # Read files
-                'Glob',       # File pattern matching
-                'Grep',       # Content search
-                'LS',         # Directory listing
-                'WebSearch',  # Web search for docs
-                'WebFetch',   # Fetch web content
-                'TodoWrite',  # Create todos (triggers hook sync)
-            ])
+            # Build command args using shared config
             cmd = [
                 'claude',
                 '-p', prompt,
-                '--allowedTools', allowed_tools,
-                '--max-turns', str(self.max_turns)
+                '--allowedTools', get_allowed_tools_string(),
             ]
 
             log("DECOMPOSE", f"  Command: {' '.join(cmd[:5])}...")
@@ -442,7 +377,6 @@ class ProjectDecomposer:
 
 def decompose_task(
     task_title: str,
-    task_description: str = "",
     project_paths: List[str] = None,
     api_profile: str = None,
     timeout: int = 300
@@ -452,7 +386,6 @@ def decompose_task(
 
     Args:
         task_title: Title of the task
-        task_description: Optional description
         project_paths: List of project paths (defaults to cwd)
         api_profile: Optional API profile name
         timeout: Timeout in seconds
@@ -469,4 +402,4 @@ def decompose_task(
         timeout=timeout
     )
 
-    return decomposer.decompose(task_title, task_description)
+    return decomposer.decompose(task_title)

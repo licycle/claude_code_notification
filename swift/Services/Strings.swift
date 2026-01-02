@@ -254,6 +254,14 @@ enum StringKey: String, CaseIterable {
     case todo_minutes
     case todo_project
 
+    // ========== Todo Batch Operations ==========
+    case todo_batch_complete
+    case todo_batch_pending
+    case todo_batch_delete
+    case todo_batch_confirm_title
+    case todo_batch_confirm_message
+    case todo_selected_count
+
     // ========== Create Task/Todo ==========
     case create_mode_task
     case create_mode_todo
@@ -517,6 +525,14 @@ struct Strings {
         .todo_estimated_time: [.english: "Estimated:", .chinese: "预估时间:"],
         .todo_minutes: [.english: "minutes", .chinese: "分钟"],
         .todo_project: [.english: "Project:", .chinese: "项目:"],
+
+        // ========== Todo Batch Operations ==========
+        .todo_batch_complete: [.english: "Mark Complete", .chinese: "标记完成"],
+        .todo_batch_pending: [.english: "Mark Pending", .chinese: "标记待处理"],
+        .todo_batch_delete: [.english: "Delete", .chinese: "删除"],
+        .todo_batch_confirm_title: [.english: "Batch Operation", .chinese: "批量操作"],
+        .todo_batch_confirm_message: [.english: "Are you sure you want to perform this operation on %d selected items?", .chinese: "确定要对选中的 %d 个项目执行此操作吗？"],
+        .todo_selected_count: [.english: "%d selected", .chinese: "已选 %d 项"],
 
         // ========== Create Task/Todo ==========
         .create_mode_task: [.english: "Global Task", .chinese: "全局任务"],

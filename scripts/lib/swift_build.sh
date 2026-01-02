@@ -5,7 +5,7 @@
 # ================= Swift Build Functions =================
 
 # Swift source files in compilation order
-SWIFT_FILES="Utils/Logger.swift Services/PathConstants.swift Utils/PermissionManager.swift Services/DatabaseModels.swift Services/DatabaseManager.swift Services/DatabaseManager+Timeline.swift Services/DatabaseManager+Reports.swift Services/TodoDatabaseManager.swift Services/APIProfileManager.swift Services/AccountManager.swift Services/BackgroundTaskRunner.swift Services/MCPServerManager.swift Services/Strings.swift Services/LocalizationManager.swift Services/SettingsManager.swift UI/Management/TaskCenter/TaskFilterBar.swift UI/Management/Reports/DailyReportView.swift UI/Management/TaskCenter/TaskCenterViewController.swift UI/Management/TaskCenter/TaskCenterDetailViewController.swift UI/Management/Reports/ReportsViewController.swift UI/Management/MCPViewController.swift UI/Management/SidebarViewController.swift UI/Management/ManagementMainViewController.swift UI/Management/ManagementWindowController.swift UI/TimelineNodeDetailPopover.swift UI/SessionCardView.swift UI/SessionListView.swift UI/SessionDetailView.swift UI/Todo/CreateTaskSheet.swift UI/Todo/TodoDetailSheet.swift UI/Todo/TodoListView.swift UI/StatusBarController.swift Core/AppDelegate.swift UI/SettingsWindow.swift Core/Main.swift"
+SWIFT_FILES="Utils/Logger.swift Services/PathConstants.swift Utils/PermissionManager.swift Services/DatabaseModels.swift Services/DatabaseManager.swift Services/DatabaseManager+Timeline.swift Services/DatabaseManager+Reports.swift Services/TodoDatabaseManager.swift Services/APIProfileManager.swift Services/AccountManager.swift Services/DecomposeConfig.swift Services/BackgroundTaskRunner.swift Services/MCPServerManager.swift Services/Strings.swift Services/LocalizationManager.swift Services/SettingsManager.swift UI/Management/TaskCenter/TaskFilterBar.swift UI/Management/Reports/DailyReportView.swift UI/Management/TaskCenter/TaskCenterViewController.swift UI/Management/TaskCenter/TaskCenterDetailViewController.swift UI/Management/Reports/ReportsViewController.swift UI/Management/MCPViewController.swift UI/Management/SidebarViewController.swift UI/Management/ManagementMainViewController.swift UI/Management/ManagementWindowController.swift UI/TimelineNodeDetailPopover.swift UI/SessionCardView.swift UI/SessionListView.swift UI/SessionDetailView.swift UI/Todo/CreateTaskSheet.swift UI/Todo/TodoDetailSheet.swift UI/Todo/TodoListView.swift UI/StatusBarController.swift Core/AppDelegate.swift UI/SettingsWindow.swift Core/Main.swift"
 
 # Compile Swift application
 # Arguments: $1 = SWIFT_DIR, $2 = BINARY_PATH
@@ -33,6 +33,7 @@ compile_swift() {
         "$swift_dir/Services/TodoDatabaseManager.swift" \
         "$swift_dir/Services/APIProfileManager.swift" \
         "$swift_dir/Services/AccountManager.swift" \
+        "$swift_dir/Services/DecomposeConfig.swift" \
         "$swift_dir/Services/BackgroundTaskRunner.swift" \
         "$swift_dir/Services/MCPServerManager.swift" \
         "$swift_dir/Services/Strings.swift" \

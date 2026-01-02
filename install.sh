@@ -146,6 +146,17 @@ SUMMARY_CONFIG_DIR="$HOME/.claude-task-tracker"
 mkdir -p "$SUMMARY_CONFIG_DIR"
 run_summary_wizard "$SUMMARY_CONFIG_DIR/config.json"
 
+# Copy decompose config to ~/.claude-hooks/ (if not exists)
+HOOKS_CONFIG_DIR="$HOME/.claude-hooks"
+mkdir -p "$HOOKS_CONFIG_DIR"
+DECOMPOSE_CONFIG="$HOOKS_CONFIG_DIR/decompose_config.json"
+if [ ! -f "$DECOMPOSE_CONFIG" ]; then
+    cp "$SCRIPT_DIR/assets/decompose_config.json" "$DECOMPOSE_CONFIG"
+    cecho "${GREEN}Installed decompose config${NC}"
+else
+    cecho "${YELLOW}Decompose config exists, skipping${NC}"
+fi
+
 # ================= 3.6 Install Slash Commands =================
 cecho "\n${BLUE}--- Installing Slash Commands ---${NC}"
 COMMANDS_SRC="$SCRIPT_DIR/commands"

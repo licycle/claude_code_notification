@@ -689,6 +689,90 @@ class TodoDatabaseManager {
         return false
     }
 
+    // MARK: - Batch Operations
+
+    /// Batch update todos status
+    /// - Returns: Number of updated todos
+    func updateTodosStatus(ids: [Int], status: String) -> Int {
+        guard !ids.isEmpty else { return 0 }
+        guard dbManager.openDatabase() else { return 0 }
+        defer { dbManager.closeDatabase() }
+
+        let now = ISO8601DateFormatter().string(from: Date())
+        let placeholders = ids.map { _ in "?" }.joined(separator: ", ")
+
+        var query = "UPDATE todos SET status = ?, updated_at = ?"
+        if status == "completed" {
+            query += ", completed_at = ?"
+        }
+        query += " WHERE id IN (\(placeholders))"
+
+        var statement: OpaquePointer?
+        if sqlite3_prepare_v2(dbManager.db, query, -1, &statement, nil) == SQLITE_OK {
+            var paramIndex: Int32 = 1
+            sqlite3_bind_text(statement, paramIndex, status, -1, SQLITE_TRANSIENT_TODO)
+            paramIndex += 1
+            sqlite3_bind_text(statement, paramIndex, now, -1, SQLITE_TRANSIENT_TODO)
+            paramIndex += 1
+
+            if status == "completed" {
+                sqlite3_bind_text(statement, paramIndex, now, -1, SQLITE_TRANSIENT_TODO)
+                paramIndex += 1
+            }
+
+            for id in ids {
+                sqlite3_bind_int(statement, paramIndex, Int32(id))
+                paramIndex += 1
+            }
+
+            if sqlite3_step(statement) == SQLITE_DONE {
+                let changes = Int(sqlite3_changes(dbManager.db))
+                sqlite3_finalize(statement)
+                return changes
+            }
+        }
+        sqlite3_finalize(statement)
+        return 0
+    }
+
+    /// Batch delete todos
+    /// - Returns: Number of deleted todos
+    func deleteTodos(ids: [Int]) -> Int {
+        guard !ids.isEmpty else { return 0 }
+        guard dbManager.openDatabase() else { return 0 }
+        defer { dbManager.closeDatabase() }
+
+        let now = ISO8601DateFormatter().string(from: Date())
+        let placeholders = ids.map { _ in "?" }.joined(separator: ", ")
+
+        // First orphan children
+        var statement: OpaquePointer?
+        let orphanQuery = "UPDATE todos SET parent_todo_id = NULL, updated_at = ? WHERE parent_todo_id IN (\(placeholders))"
+        if sqlite3_prepare_v2(dbManager.db, orphanQuery, -1, &statement, nil) == SQLITE_OK {
+            sqlite3_bind_text(statement, 1, now, -1, SQLITE_TRANSIENT_TODO)
+            for (i, id) in ids.enumerated() {
+                sqlite3_bind_int(statement, Int32(i + 2), Int32(id))
+            }
+            sqlite3_step(statement)
+        }
+        sqlite3_finalize(statement)
+
+        // Then delete todos
+        let deleteQuery = "DELETE FROM todos WHERE id IN (\(placeholders))"
+        if sqlite3_prepare_v2(dbManager.db, deleteQuery, -1, &statement, nil) == SQLITE_OK {
+            for (i, id) in ids.enumerated() {
+                sqlite3_bind_int(statement, Int32(i + 1), Int32(id))
+            }
+            if sqlite3_step(statement) == SQLITE_DONE {
+                let changes = Int(sqlite3_changes(dbManager.db))
+                sqlite3_finalize(statement)
+                return changes
+            }
+        }
+        sqlite3_finalize(statement)
+        return 0
+    }
+
     /// Delete a global task
     /// - Returns: true if successful
     func deleteGlobalTask(id: Int) -> Bool {
