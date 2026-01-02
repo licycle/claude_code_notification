@@ -220,6 +220,43 @@ if [ $REMOVED_COMMANDS -gt 0 ]; then
     cecho "${GREEN}Removed $REMOVED_COMMANDS slash command(s)${NC}"
 fi
 
+# 3.6 Remove MCP server configuration
+MCP_CONFIG_FILE="$HOME/.mcp.json"
+if [ -f "$MCP_CONFIG_FILE" ]; then
+    if grep -q "claude-todo" "$MCP_CONFIG_FILE" 2>/dev/null; then
+        cecho "${YELLOW}Found MCP config: $MCP_CONFIG_FILE${NC}"
+        printf "Remove claude-todo from MCP config? [Y/n]: "
+        read remove_mcp
+        remove_mcp=${remove_mcp:-Y}
+        if [ "$remove_mcp" = "Y" ] || [ "$remove_mcp" = "y" ]; then
+            python3 << 'PYEOF'
+import json
+import os
+
+mcp_file = os.path.expanduser("~/.mcp.json")
+try:
+    with open(mcp_file) as f:
+        config = json.load(f)
+
+    if "mcpServers" in config and "claude-todo" in config["mcpServers"]:
+        del config["mcpServers"]["claude-todo"]
+
+        if not config.get("mcpServers"):
+            os.remove(mcp_file)
+            print("Removed empty ~/.mcp.json")
+        else:
+            with open(mcp_file, 'w') as f:
+                json.dump(config, f, indent=2)
+            print("Removed claude-todo from ~/.mcp.json")
+except Exception as e:
+    print(f"Error: {e}")
+PYEOF
+        else
+            echo "Skipped: $MCP_CONFIG_FILE"
+        fi
+    fi
+fi
+
 # 4. Clean Shell Config
 CONFIG_PATH_KEY=".claude-hooks/config.sh"
 
@@ -245,6 +282,7 @@ echo "  • ~/.claude-task-tracker/ (database, logs, config)"
 echo "  • Hooks configuration from settings.json files"
 echo "  • Legacy hooks.json files (if any)"
 echo "  • Slash commands (/hl-todo)"
+echo "  • MCP server configuration from ~/.mcp.json"
 echo "  • Shell configuration entries"
 cecho "\n${YELLOW}Note:${NC} settings.json files were preserved with other settings intact."
 cecho "Please run ${YELLOW}source $RC_FILE${NC} to refresh your terminal session."

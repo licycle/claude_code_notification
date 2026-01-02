@@ -51,6 +51,37 @@ if [ "$1" = "--hooks-only" ] || [ "$1" = "-p" ]; then
         done
     fi
 
+    # Update MCP config
+    cecho "${YELLOW}Updating MCP config...${NC}"
+    MCP_CONFIG_FILE="$HOME/.mcp.json"
+    if [ -f "$MCP_CONFIG_FILE" ]; then
+        python3 << 'PYEOF'
+import json, os
+mcp_file = os.path.expanduser("~/.mcp.json")
+try:
+    with open(mcp_file) as f:
+        config = json.load(f)
+except:
+    config = {}
+if "mcpServers" not in config:
+    config["mcpServers"] = {}
+config["mcpServers"]["claude-todo"] = {"transport": "http", "url": "http://127.0.0.1:8765/mcp"}
+with open(mcp_file, 'w') as f:
+    json.dump(config, f, indent=2)
+PYEOF
+    else
+        cat > "$MCP_CONFIG_FILE" << 'EOF'
+{
+  "mcpServers": {
+    "claude-todo": {
+      "transport": "http",
+      "url": "http://127.0.0.1:8765/mcp"
+    }
+  }
+}
+EOF
+    fi
+
     cecho "${GREEN}Hooks updated${NC}"
     cecho "   Source: ${BLUE}$TRACKER_SRC${NC}"
     cecho "   Target: ${BLUE}$TRACKER_DIR${NC}"
@@ -174,6 +205,50 @@ if [ -d "$COMMANDS_SRC" ]; then
     cecho "${GREEN}Slash commands installed${NC}"
 else
     cecho "${YELLOW}No slash commands found in $COMMANDS_SRC${NC}"
+fi
+
+# ================= 3.7 Configure MCP Server =================
+cecho "\n${BLUE}--- Configuring MCP Server ---${NC}"
+MCP_CONFIG_FILE="$HOME/.mcp.json"
+
+if [ -f "$MCP_CONFIG_FILE" ]; then
+    # Merge with existing config using Python
+    python3 << 'PYEOF'
+import json
+import os
+
+mcp_file = os.path.expanduser("~/.mcp.json")
+try:
+    with open(mcp_file) as f:
+        config = json.load(f)
+except:
+    config = {}
+
+if "mcpServers" not in config:
+    config["mcpServers"] = {}
+
+config["mcpServers"]["claude-todo"] = {
+    "transport": "http",
+    "url": "http://127.0.0.1:8765/mcp"
+}
+
+with open(mcp_file, 'w') as f:
+    json.dump(config, f, indent=2)
+
+print("Updated existing ~/.mcp.json")
+PYEOF
+else
+    cat > "$MCP_CONFIG_FILE" << 'EOF'
+{
+  "mcpServers": {
+    "claude-todo": {
+      "transport": "http",
+      "url": "http://127.0.0.1:8765/mcp"
+    }
+  }
+}
+EOF
+    cecho "${GREEN}Created ~/.mcp.json${NC}"
 fi
 
 # ================= Generate Shell Config =================
