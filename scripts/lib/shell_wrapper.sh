@@ -72,7 +72,15 @@ _claude_wrapper() {
         esac
     done
 
-    # 4. Execute in Subshell (API env isolation only)
+    # 4. Define cleanup function
+    _do_cleanup() {
+        (set +m; python3 "\$_CLAUDE_HOOKS_DIR/task_tracker/hooks/session_cleanup.py" "\$pending_id" >/dev/null 2>&1 &)
+    }
+
+    # 5. Set trap to ensure cleanup on any exit (including Ctrl+C)
+    trap '_do_cleanup' EXIT
+
+    # 6. Execute in Subshell (API env isolation only)
     (
         if [ -n "\$api_profile" ]; then
             eval "\$(python3 "\$_CLAUDE_API_MANAGER" get-env "\$api_profile")"
@@ -93,9 +101,8 @@ _claude_wrapper() {
         command claude "\${claude_args[@]}"
     )
 
-    # 5. Cleanup on exit (handles ctrl+c and normal exit)
-    # Pass pending_id as argument to only cleanup this specific session
-    (set +m; python3 "\$_CLAUDE_HOOKS_DIR/task_tracker/hooks/session_cleanup.py" "\$pending_id" >/dev/null 2>&1 &)
+    # 7. Remove trap after normal exit (cleanup already triggered by EXIT trap)
+    trap - EXIT
 }
 EOF
 }
@@ -247,7 +254,15 @@ _claude_wrapper() {
         esac
     done
 
-    # 4. Execute in Subshell (API env isolation only)
+    # 4. Define cleanup function
+    _do_cleanup() {
+        (set +m; python3 "$_CLAUDE_HOOKS_DIR/task_tracker/hooks/session_cleanup.py" "$pending_id" >/dev/null 2>&1 &)
+    }
+
+    # 5. Set trap to ensure cleanup on any exit (including Ctrl+C)
+    trap '_do_cleanup' EXIT
+
+    # 6. Execute in Subshell (API env isolation only)
     (
         if [ -n "$api_profile" ]; then
             eval "$(python3 "$_CLAUDE_API_MANAGER" get-env "$api_profile")"
@@ -268,9 +283,8 @@ _claude_wrapper() {
         command claude "${claude_args[@]}"
     )
 
-    # 5. Cleanup on exit (handles ctrl+c and normal exit)
-    # Pass pending_id as argument to only cleanup this specific session
-    (set +m; python3 "$_CLAUDE_HOOKS_DIR/task_tracker/hooks/session_cleanup.py" "$pending_id" >/dev/null 2>&1 &)
+    # 7. Remove trap after normal exit (cleanup already triggered by EXIT trap)
+    trap - EXIT
 }
 
 # --- User Aliases ---

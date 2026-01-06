@@ -90,7 +90,11 @@
       "WebFetch(domain:mcp.deepwiki.com)",
       "WebFetch(domain:mcp.context7.com)",
       "mcp__claude-todo__list_todos",
-      "Bash(kill:*)"
+      "Bash(kill:*)",
+      "mcp__claude-todo__start_todo",
+      "mcp__claude-todo__complete_todo",
+      "Bash(for pid in 93967 92736 2581)",
+      "Bash(do ps -p $pid -o pid,stat,comm)"
     ]
   },
   "enableAllProjectMcpServers": true,
@@ -98,7 +102,7 @@
     "claude-todo"
   ],
   "sandbox": {
-    "enabled": true,
-    "autoAllowBashIfSandboxed": true
+    "enabled": false,
+    "autoAllowBashIfSandboxed": false
   }
 }

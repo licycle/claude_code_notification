@@ -54,6 +54,11 @@ if [ "$1" = "--hooks-only" ] || [ "$1" = "-p" ]; then
     # Update MCP config
     cecho "${YELLOW}Updating MCP config...${NC}"
     MCP_CONFIG_FILE="$HOME/.mcp.json"
+
+    # Update hooks config in settings.json
+    cecho "${YELLOW}Updating hooks config...${NC}"
+    generate_hooks_config "$HOME/.claude"
+
     if [ -f "$MCP_CONFIG_FILE" ]; then
         python3 << 'PYEOF'
 import json, os

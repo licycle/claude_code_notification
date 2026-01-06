@@ -90,8 +90,8 @@ def cleanup_session(pending_id: str = None):
 
 
 def main():
-    """Main entry point - accepts pending_id as command line argument"""
-    pending_id = sys.argv[1] if len(sys.argv) > 1 else None
+    """Main entry point - accepts pending_id from argument or environment"""
+    pending_id = sys.argv[1] if len(sys.argv) > 1 else os.environ.get('CLAUDE_PENDING_SESSION_ID')
     cleanup_session(pending_id)
 
 

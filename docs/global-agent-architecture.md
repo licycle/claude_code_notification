@@ -1,8 +1,8 @@
 # 全局 Agent 工作流系统 - 架构设计
 
-> 版本: 1.0
-> 日期: 2025-12-30
-> 状态: 设计阶段
+> 版本: 2.0
+> 日期: 2026-01-02
+> 状态: 已实现
 
 ## 目录
 
@@ -38,11 +38,11 @@ Claude Monitor 当前是一个 macOS 原生应用，为 Claude Code 提供桌面
 构建一个**全局 Agent 工作流系统**，实现：
 
 1. **全局任务管理**：用户可以创建跨项目的高层次任务
-2. **项目级 Todo 分发**：任务可以分解为具体的项目级 Todo
+2. **简化的任务分解**：使用单次 Claude CLI 调用分析项目并生成 Todos
 3. **Claude Code 集成**：通过 MCP Server 让 Claude Code 主动调用 Todo 系统
-4. **执行追踪**：记录每个 Todo 的执行过程和完成情况
-5. **AI 辅助**：支持任务分解和完成总结的 AI 生成
-6. **可自定义工作流**：用户可定义自己的任务分解和处理流程
+4. **自动同步**：TodoWrite Hook 自动将 Claude 生成的 todos 同步到数据库
+5. **执行追踪**：记录每个 Todo 的执行过程和完成情况
+6. **可配置分解**：通过 `decompose_config.json` 自定义分解提示词和工具
 
 ### 1.3 设计原则
 
@@ -115,15 +115,19 @@ Claude Monitor 当前是一个 macOS 原生应用，为 Claude Code 提供桌面
 
 ### 2.3 关键流程
 
-**流程 1：创建全局任务**
+**流程 1：创建全局任务并分解**
 ```
-用户 → CLI/Swift UI → 创建 Global Task
-                          ↓
-                   (可选) AI 分解
-                          ↓
-                   生成项目级 Todos
-                          ↓
-                   存储到数据库
+用户 → CLI: task create "任务标题"
+                    ↓
+            创建 Global Task
+                    ↓
+            (可选) --no-decompose 跳过分解
+                    ↓
+            ProjectDecomposer 调用 Claude CLI
+                    ↓
+            Claude 分析项目 + 调用 TodoWrite
+                    ↓
+            PostToolUse Hook 同步 Todos 到数据库
 ```
 
 **流程 2：执行 Todo**
@@ -141,17 +145,15 @@ Claude Code 选择/开始 Todo
 (可选) AI 生成完成总结
 ```
 
-**流程 3：自定义工作流执行**
+**流程 3：手动分解已有任务**
 ```
-用户定义工作流 (YAML)
-         ↓
-Workflow Engine 解析和调度
-         ↓
-Claude Agent 自主探索代码
-         ↓
-执行自定义 Hooks
-         ↓
-生成结果并存储
+用户 → CLI: task decompose <task_id>
+                    ↓
+            指定项目路径和 API profile
+                    ↓
+            ProjectDecomposer 执行分解
+                    ↓
+            Todos 自动同步到数据库
 ```
 
 ---
@@ -255,15 +257,17 @@ python/task_tracker/
 │   ├── account_manager.py      # (现有)
 │   └── todo_cli.py             # CLI 入口
 ├── hooks/
-│   ├── goal_tracker.py         # 修改: 增加 Todo 感知
-│   ├── progress_tracker.py     # (现有)
+│   ├── utils.py                # 公共工具函数
+│   ├── goal_tracker.py         # UserPromptSubmit: Todo 感知
+│   ├── progress_tracker.py     # PostToolUse: TodoWrite 同步
 │   ├── notification_tracker.py # (现有)
-│   └── snapshot_hook.py        # 修改: 增加 Todo 完成处理
+│   └── snapshot_hook.py        # Stop: Todo 完成处理
 ├── services/
-│   ├── database.py             # 修改: 增加新表
+│   ├── database.py             # 数据库核心
 │   ├── todo_service.py         # Todo 服务
 │   ├── project_decomposer.py   # 项目分解服务 (单次 Claude CLI 调用)
-│   ├── summary_service.py      # (现有) 复用 AI 功能
+│   ├── decompose_config.py     # 分解配置 (提示词、工具列表)
+│   ├── summary_service.py      # (现有) AI 总结
 │   └── notification.py         # (现有)
 └── mcp/
     ├── __init__.py
@@ -395,13 +399,18 @@ MCP (Model Context Protocol) Server 是 Claude Code 与 Todo 系统交互的桥�
 
 | 工具名 | 说明 | 主要参数 |
 |--------|------|----------|
-| `list_todos` | 列出项目相关的 Todos | project_path, status, limit |
-| `get_todo` | 获取 Todo 详情 | todo_id |
-| `start_todo` | 开始执行 Todo | todo_id, session_id |
-| `complete_todo` | 完成 Todo | todo_id, summary |
-| `split_todo` | 拆分 Todo 为子任务 | todo_id, sub_todos |
-| `create_todo` | 创建 Todo | title, project_path, priority |
-| `update_todo` | 更新 Todo | todo_id, status, priority |
+| `list_todos` | 列出项目 Todos | project_path, status, include_children, limit |
+| `get_todo` | 获取 Todo 详情 | todo_id, include_children |
+| `start_todo` | 开始执行 Todo | todo_id, notes |
+| `complete_todo` | 完成 Todo | todo_id, summary, actual_minutes |
+| `split_todo` | 拆分为子任务 | todo_id, sub_todos |
+| `create_todo` | 创建 Todo | title, project_path, priority, global_task_id |
+| `update_todo` | 更新 Todo | todo_id, title, status, priority |
+| `get_pending_todos` | 快速获取待办 | project_path, limit |
+
+**状态值**: `pending`, `in_progress`, `blocked`, `completed`, `cancelled`
+
+**优先级**: `0`=普通, `1`=高, `2`=紧急
 
 ### 5.4 配置方式
 
@@ -435,7 +444,6 @@ claude-todo <command> [subcommand] [options]
 Commands:
   task      管理全局任务
   todo      管理 Todos
-  workflow  管理工作流
   server    管理 MCP Server
 ```
 
@@ -444,12 +452,29 @@ Commands:
 #### task 命令组
 | 命令 | 说明 |
 |------|------|
-| `task create` | 创建全局任务 |
+| `task create <title>` | 创建全局任务并自动分解 |
+| `task create --no-decompose` | 创建任务但不自动分解 |
 | `task list` | 列出全局任务 |
-| `task show` | 查看任务详情 |
-| `task update` | 更新任务 |
-| `task archive` | 归档任务 |
-| `task decompose` | AI 分解任务为 Todos |
+| `task show <id>` | 查看任务详情 |
+| `task update <id>` | 更新任务 |
+| `task archive <id>` | 归档任务 |
+| `task decompose <id>` | 手动分解已有任务为 Todos |
+
+**task create 选项**:
+```bash
+claude-todo task create "任务标题" \
+  --projects /path/to/project \    # 目标项目路径
+  --api-profile kimi \             # 使用指定 API profile
+  --account default \              # 使用指定账户
+  --no-decompose                   # 跳过自动分解
+```
+
+**task decompose 选项**:
+```bash
+claude-todo task decompose <task_id> \
+  --projects /path/to/project \    # 目标项目路径
+  --api-profile kimi               # 使用指定 API profile
+```
 
 #### todo 命令组
 | 命令 | 说明 |
@@ -461,16 +486,6 @@ Commands:
 | `todo start` | 开始执行 Todo |
 | `todo complete` | 完成 Todo |
 | `todo split` | 拆分 Todo |
-
-#### workflow 命令组
-| 命令 | 说明 |
-|------|------|
-| `workflow list` | 列出可用工作流 |
-| `workflow run` | 运行工作流 |
-| `workflow validate` | 验证工作流定义 |
-| `workflow status` | 查看运行状态 |
-| `workflow cancel` | 取消运行中的工作流 |
-| `workflow logs` | 查看步骤日志 |
 
 #### server 命令组
 | 命令 | 说明 |
@@ -588,31 +603,35 @@ result = decomposer.decompose("任务标题", "任务描述")
 
 ```bash
 claude -p "prompt" \
-  --allowedTools "Read,Grep,Glob" \
-  --max-turns 15
+  --allowedTools "Task,Read,Glob,Grep,LS,WebSearch,WebFetch,TodoWrite"
 ```
 
-#### 输出格式
+**允许的工具**（可通过 `decompose_config.json` 自定义）：
+- `Task` - Explore subagent 深度搜索
+- `Read` - 读取文件
+- `Glob` - 文件模式匹配
+- `Grep` - 内容搜索
+- `LS` - 目录列表
+- `WebSearch` - 网络搜索
+- `WebFetch` - 获取网页内容
+- `TodoWrite` - 创建 todos（触发 hook 同步）
 
-```json
-{
-  "analysis": {
-    "project_type": "python",
-    "tech_stack": ["FastAPI", "SQLite"],
-    "relevant_files": ["src/main.py"]
-  },
-  "todos": [
-    {
-      "project_path": "/path/to/project",
-      "title": "Implement JWT authentication",
-      "description": "Add JWT middleware...",
-      "priority": 0,
-      "estimated_minutes": 60
-    }
-  ],
-  "total_estimated_minutes": 480
-}
+#### TodoWrite Hook 同步机制
+
 ```
+Claude 调用 TodoWrite 工具
+         ↓
+PostToolUse Hook 触发 (progress_tracker.py)
+         ↓
+sync_todos_to_global_table() 执行
+         ↓
+Todos 写入数据库 (关联 global_task_id)
+```
+
+**关键代码路径**：
+- `hooks/progress_tracker.py` - 监听 TodoWrite 工具调用
+- `services/todo_service.py` - Todo CRUD 操作
+- 环境变量 `CLAUDE_DECOMPOSE_TASK_ID` 传递 global_task_id
 
 #### CLI 命令
 
@@ -654,23 +673,21 @@ claude-todo task decompose <task_id> \
 - 实现 task/todo/server 命令组
 - 更新 install.sh 安装 CLI
 
-### 阶段 4: Workflow Engine
+### 阶段 4: ProjectDecomposer
 
-**目标**: 实现可自定义工作流引擎
+**目标**: 实现简化的任务分解服务
 
-- 实现 YAML 解析器
-- 实现工作流引擎核心
-- 实现 Hook 管理器（子进程隔离）
-- 实现 Claude Agent 封装
-- 创建默认工作流定义
+- 实现 `project_decomposer.py` 单次 Claude CLI 调用
+- 实现 `decompose_config.py` 配置管理
+- 增强 `progress_tracker.py` 支持 TodoWrite 同步
+- 支持 API profile 和多账户
 
 ### 阶段 5: Swift UI 基础
 
-**目标**: 在 Swift App 中展示 Todos 和 Workflows
+**目标**: 在 Swift App 中展示 Todos
 
 - 添加数据模型
 - 实现 TodoListView
-- 实现 WorkflowStatusView
 - 在 TaskCenter 添加标签页
 - 更新状态栏显示
 
@@ -715,14 +732,13 @@ claude-todo task decompose <task_id> \
    - 可以通过命令行创建/列出/更新 Todos
    - 可以启动/停止 MCP Server
 
-4. **Workflow Engine**
-   - 可以解析和执行 YAML 工作流
-   - 支持 Python/Shell/Claude Agent 三种 Hook 类型
-   - Hook 在子进程中隔离执行
+4. **ProjectDecomposer**
+   - 可以通过 Claude CLI 分析项目并生成 Todos
+   - TodoWrite Hook 自动同步 todos 到数据库
+   - 支持 API profile 和多账户配置
 
 5. **Swift UI**
    - TaskCenter 可以显示 Todos 列表
-   - TaskCenter 可以显示工作流状态
    - 可以按项目/状态筛选 Todos
 
 6. **自动关联**
@@ -737,9 +753,72 @@ claude-todo task decompose <task_id> \
 |------|------|
 | `~/.claude-task-tracker/tasks.db` | SQLite 数据库 |
 | `~/.claude-task-tracker/config.json` | 配置文件 |
-| `~/.claude-task-tracker/workflows/` | 用户自定义工作流 |
 | `~/.claude-task-tracker/cache/` | 缓存目录 |
+| `~/.claude-hooks/api_profiles.json` | API Profile 配置 |
+| `~/.claude-hooks/accounts.json` | 多账户配置 |
+| `~/.claude-hooks/decompose_config.json` | 分解配置 |
 | `~/.mcp.json` | MCP Server 配置 |
+
+### B.1 API Profile 配置
+
+`~/.claude-hooks/api_profiles.json` 用于配置第三方 AI 提供商：
+
+```json
+{
+  "kimi": {
+    "ANTHROPIC_BASE_URL": "https://api.moonshot.cn/anthropic",
+    "ANTHROPIC_AUTH_TOKEN": "sk-xxx",
+    "ANTHROPIC_MODEL": "kimi-k2-thinking"
+  },
+  "openai": {
+    "ANTHROPIC_BASE_URL": "https://api.openai.com/v1",
+    "ANTHROPIC_AUTH_TOKEN": "sk-xxx"
+  }
+}
+```
+
+**使用方式**:
+```bash
+claude-todo task create "任务标题" --api-profile kimi
+claude-todo task decompose 1 --api-profile openai
+```
+
+### B.2 多账户配置
+
+`~/.claude-hooks/accounts.json` 用于管理多个 Claude 账户：
+
+```json
+{
+  "default": "/Users/xxx/.claude",
+  "work": "/Users/xxx/.claude-work",
+  "personal": "/Users/xxx/.claude-personal"
+}
+```
+
+### B.3 分解配置
+
+`~/.claude-hooks/decompose_config.json` 用于自定义任务分解行为：
+
+```json
+{
+  "prompt_template": "自定义提示词模板...",
+  "allowed_tools": ["Task", "Read", "Glob", "Grep", "TodoWrite"]
+}
+```
+
+**默认允许的工具**:
+- `Task` - Explore subagent 深度搜索
+- `Read` - 读取文件
+- `Glob` - 文件模式匹配
+- `Grep` - 内容搜索
+- `LS` - 目录列表
+- `WebSearch` - 网络搜索
+- `WebFetch` - 获取网页内容
+- `TodoWrite` - 创建 todos（必需）
+
+**提示词模板变量**:
+- `{task_title}` - 任务标题
+- `{project_paths_list}` - 项目路径列表
 
 ---
 
@@ -749,9 +828,8 @@ claude-todo task decompose <task_id> \
 |---------|------|------|
 | `python/task_tracker/services/database.py` | 修改 | 添加新表 schema |
 | `python/task_tracker/services/todo_service.py` | 新建 | Todo 服务核心 |
-| `python/task_tracker/workflow/engine.py` | 新建 | 工作流引擎 |
-| `python/task_tracker/workflow/hooks.py` | 新建 | Hook 管理器 |
-| `python/task_tracker/workflow/claude_agent.py` | 新建 | Claude Agent 封装 |
+| `python/task_tracker/services/project_decomposer.py` | 新建 | 项目分解服务 |
+| `python/task_tracker/services/decompose_config.py` | 新建 | 分解配置管理 |
 | `python/task_tracker/mcp/server.py` | 新建 | MCP Server 主入口 |
 | `python/task_tracker/mcp/tools.py` | 新建 | MCP 工具实现 |
 | `python/task_tracker/cli/todo_cli.py` | 新建 | CLI 入口 |
@@ -760,5 +838,4 @@ claude-todo task decompose <task_id> \
 | `swift/Services/DatabaseModels.swift` | 修改 | 新增数据模型 |
 | `swift/Services/TodoDatabaseManager.swift` | 新建 | Todo 查询 |
 | `swift/UI/Todo/TodoListView.swift` | 新建 | Todo 列表 UI |
-| `swift/UI/Workflow/WorkflowStatusView.swift` | 新建 | 工作流状态 UI |
 | `install.sh` | 修改 | MCP Server 安装 |

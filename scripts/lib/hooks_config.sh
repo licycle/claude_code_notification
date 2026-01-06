@@ -28,6 +28,7 @@ tracker_notification_hook = f"{base_dir}/task_tracker/hooks/notification_tracker
 tracker_snapshot_hook = f"{base_dir}/task_tracker/hooks/snapshot_hook.py"
 tracker_permission_hook = f"{base_dir}/task_tracker/hooks/permission_tracker.py"
 tracker_pre_tool_hook = f"{base_dir}/task_tracker/hooks/pre_tool_tracker.py"
+tracker_cleanup_hook = f"{base_dir}/task_tracker/hooks/session_cleanup.py"
 tracker_subagent_hook = f"{base_dir}/task_tracker/hooks/subagent_tracker.py"
 tracker_session_start_hook = f"{base_dir}/task_tracker/hooks/session_start_hook.py"
 
@@ -76,6 +77,13 @@ hooks_config = {
         {
             "hooks": [
                 {"type": "command", "command": f"python3 {tracker_snapshot_hook}", "timeout": 30}
+            ]
+        }
+    ],
+    "SessionEnd": [
+        {
+            "hooks": [
+                {"type": "command", "command": f"python3 {tracker_cleanup_hook}", "timeout": 5}
             ]
         }
     ]
