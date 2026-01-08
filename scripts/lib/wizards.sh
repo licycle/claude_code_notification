@@ -245,6 +245,38 @@ configure_hooks_for_accounts() {
     done
 }
 
+# Configure MCP for all accounts
+# Arguments: $1 = account_aliases, $2 = account_paths
+# Requires: configure_mcp_config() from hooks_config.sh
+configure_mcp_for_accounts() {
+    local aliases="$1"
+    local paths="$2"
+
+    local idx=0
+    for alias_name in $aliases; do
+        [ -z "$alias_name" ] && continue
+        idx=$((idx + 1))
+
+        # Extract path
+        local path_idx=0
+        local config_path=""
+        IFS='|'
+        for path in $paths; do
+            path_idx=$((path_idx + 1))
+            if [ $path_idx -eq $((idx + 1)) ]; then
+                config_path="$path"
+                break
+            fi
+        done
+        IFS=' '
+
+        [ -z "$config_path" ] && continue
+
+        cecho "   Configuring MCP for '$alias_name' ($config_path)"
+        configure_mcp_config "$config_path"
+    done
+}
+
 # ================= Installation Summary =================
 
 # Print installation summary

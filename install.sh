@@ -51,40 +51,24 @@ if [ "$1" = "--hooks-only" ] || [ "$1" = "-p" ]; then
         done
     fi
 
-    # Update MCP config
-    cecho "${YELLOW}Updating MCP config...${NC}"
-    MCP_CONFIG_FILE="$HOME/.mcp.json"
+    # Update MCP config and hooks config
+    cecho "${YELLOW}Updating MCP config and hooks...${NC}"
 
-    # Update hooks config in settings.json
-    cecho "${YELLOW}Updating hooks config...${NC}"
-    generate_hooks_config "$HOME/.claude"
-
-    if [ -f "$MCP_CONFIG_FILE" ]; then
-        python3 << 'PYEOF'
-import json, os
-mcp_file = os.path.expanduser("~/.mcp.json")
-try:
-    with open(mcp_file) as f:
-        config = json.load(f)
-except:
-    config = {}
-if "mcpServers" not in config:
-    config["mcpServers"] = {}
-config["mcpServers"]["claude-todo"] = {"transport": "http", "url": "http://127.0.0.1:8765/mcp"}
-with open(mcp_file, 'w') as f:
-    json.dump(config, f, indent=2)
-PYEOF
+    # Read accounts from accounts.json or fall back to default
+    ACCOUNTS_JSON="$BASE_DIR/accounts.json"
+    if [ -f "$ACCOUNTS_JSON" ]; then
+        # Update hooks and MCP for all accounts
+        cecho "   Found accounts.json, updating all accounts..."
+        for config_path in $(python3 -c "import json; accounts=json.load(open('$ACCOUNTS_JSON')); print(' '.join(accounts.values()))"); do
+            cecho "   Processing: $config_path"
+            generate_hooks_config "$config_path"
+            configure_mcp_config "$config_path"
+        done
     else
-        cat > "$MCP_CONFIG_FILE" << 'EOF'
-{
-  "mcpServers": {
-    "claude-todo": {
-      "type": "http",
-      "url": "http://127.0.0.1:8765/mcp"
-    }
-  }
-}
-EOF
+        # Fall back to default ~/.claude
+        cecho "   Using default account: ~/.claude"
+        generate_hooks_config "$HOME/.claude"
+        configure_mcp_config "$HOME/.claude"
     fi
 
     cecho "${GREEN}Hooks updated${NC}"
@@ -212,50 +196,6 @@ else
     cecho "${YELLOW}No slash commands found in $COMMANDS_SRC${NC}"
 fi
 
-# ================= 3.7 Configure MCP Server =================
-cecho "\n${BLUE}--- Configuring MCP Server ---${NC}"
-MCP_CONFIG_FILE="$HOME/.mcp.json"
-
-if [ -f "$MCP_CONFIG_FILE" ]; then
-    # Merge with existing config using Python
-    python3 << 'PYEOF'
-import json
-import os
-
-mcp_file = os.path.expanduser("~/.mcp.json")
-try:
-    with open(mcp_file) as f:
-        config = json.load(f)
-except:
-    config = {}
-
-if "mcpServers" not in config:
-    config["mcpServers"] = {}
-
-config["mcpServers"]["claude-todo"] = {
-    "type": "http",
-    "url": "http://127.0.0.1:8765/mcp"
-}
-
-with open(mcp_file, 'w') as f:
-    json.dump(config, f, indent=2)
-
-print("Updated existing ~/.mcp.json")
-PYEOF
-else
-    cat > "$MCP_CONFIG_FILE" << 'EOF'
-{
-  "mcpServers": {
-    "claude-todo": {
-      "type": "http",
-      "url": "http://127.0.0.1:8765/mcp"
-    }
-  }
-}
-EOF
-    cecho "${GREEN}Created ~/.mcp.json${NC}"
-fi
-
 # ================= Generate Shell Config =================
 cecho "${YELLOW}Generating Shell Integration...${NC}"
 generate_shell_wrapper "$CONFIG_FILE" "$BINARY_PATH" "$API_MANAGER_SCRIPT" "$ACCOUNT_MANAGER_SCRIPT" "$BASE_DIR"
@@ -273,6 +213,10 @@ run_api_wizard
 # ================= 6. Configure Claude Hooks Integration =================
 cecho "\n${YELLOW}[6/7] Configuring Claude Hooks...${NC}"
 configure_hooks_for_accounts "$account_aliases" "$account_paths"
+
+# Configure MCP for all accounts
+cecho "${YELLOW}Configuring MCP servers...${NC}"
+configure_mcp_for_accounts "$account_aliases" "$account_paths"
 
 # ================= 7. Finalize =================
 cecho "\n${YELLOW}[7/7] Configuring Shell Integration...${NC}"

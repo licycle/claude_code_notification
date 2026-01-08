@@ -218,3 +218,43 @@ install_cli_scripts() {
     cecho "${GREEN}✅ CLI scripts installed${NC}"
     return 0
 }
+
+# ================= MCP Configuration =================
+
+# Configure MCP servers in .claude.json for a single account
+# Arguments: $1 = config_dir (Claude config directory)
+configure_mcp_config() {
+    local config_dir=$1
+    local claude_json="$config_dir/.claude.json"
+
+    mkdir -p "$config_dir"
+
+    CONFIG_FILE="$claude_json" python3 << 'PYEOF'
+import json
+import os
+
+config_file = os.environ['CONFIG_FILE']
+
+# Load existing config
+try:
+    with open(config_file) as f:
+        config = json.load(f)
+except:
+    config = {}
+
+# Add/update mcpServers
+if "mcpServers" not in config:
+    config["mcpServers"] = {}
+
+config["mcpServers"]["claude-todo"] = {
+    "type": "http",
+    "url": "http://127.0.0.1:8765/mcp"
+}
+
+with open(config_file, 'w') as f:
+    json.dump(config, f, indent=2)
+
+print(f"   Updated MCP config in {config_file}")
+PYEOF
+    return $?
+}
